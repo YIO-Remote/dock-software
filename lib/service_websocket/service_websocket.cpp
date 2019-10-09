@@ -71,7 +71,7 @@ void WebSocketAPI::connect(String hostname)
                     irservice.receiving = true;    
                 }
 
-                // Turn on IR receiving
+                // Turn off IR receiving
                 if (wsdoc["command"].as<String>() == "ir_receive_off") {
                     irservice.receiving = false;    
                 }
