@@ -7,22 +7,33 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 
+// OTA service
 #include <service_ota.h>
-#include <service_websocket.h>
-
 OTA ota;
-WebSocketAPI wsservice;
+
+// IR service
+#include <service_ir.h>
+InfraredService irservice;
+
+// websocket server
+#include <WebSocketsServer.h>
+WebSocketsServer webSocketServer = WebSocketsServer(946);
+StaticJsonDocument<200> wsdoc;
+String token = "0";
+uint8_t serverClients[10];
+int serverClientCount = 0;
 
 StaticJsonDocument<200> doc;
-bool needsSetup = true;
+// bool needsSetup = true;
+
 ////////////////////////////////////////////////////////////////
 // STATE MACHINE
 ////////////////////////////////////////////////////////////////
 int dockState = 0;
 
 // 0 - needs setup
-// 1 - connecting to wifi, turning on OTA, connecting to websocket
-// 2 - succesful connection
+// 1 - connecting to wifi, turning on OTA
+// 2 - successful connection
 // 3 - normal operation, LED off, turns on when charging
 // 4 - error
 // 5 - LED brightness setup
@@ -37,11 +48,11 @@ bool recordmessage = false; // if true, bluetooth will start recording messages
 ////////////////////////////////////////////////////////////////
 // WIFI SETUP
 ////////////////////////////////////////////////////////////////
-#define CONN_TIMEOUT 20    // wifi timeout
+#define CONN_TIMEOUT 20                      // wifi timeout
 char hostString[] = "YIO-Dock-xxxxxxxxxxxx"; // stores the hostname
-String ssid;               // ssid
-String passwd;             // password
-String remote_id;          // hostname of the remote
+String ssid;                                 // ssid
+String passwd;                               // password
+String remote_id;                            // hostname of the remote
 bool connected = false;
 unsigned long WIFI_CHECK = 30000;
 
@@ -50,7 +61,7 @@ unsigned long WIFI_CHECK = 30000;
 ////////////////////////////////////////////////////////////////
 #define LED 23
 
-bool led_setup = false; // if the LED brightness is adjusted from the remote, this is true
+// bool led_setup = false; // if the LED brightness is adjusted from the remote, this is true
 
 int max_brightness = 50; // this updates from the remote settings screen
 
@@ -146,9 +157,10 @@ void ledHandleTask(void *pvParameters)
       }
       dockState = 3;
     }
-    else if (dockState == 5) {
-        ledcWrite(ledChannel, max_brightness);
-        delay(100);
+    else if (dockState == 5)
+    {
+      ledcWrite(ledChannel, max_brightness);
+      delay(100);
     }
   }
 }
@@ -187,14 +199,169 @@ void saveConfig(String data)
     preferences.end();
 
     int err;
-    err=nvs_flash_init();
+    err = nvs_flash_init();
     Serial.println("nvs_flash_init: " + err);
-    err=nvs_flash_erase();
+    err = nvs_flash_erase();
     Serial.println("nvs_flash_erase: " + err);
   }
 
   ESP.restart();
 }
+
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
+{
+  switch (type)
+  {
+  case WStype_DISCONNECTED:
+    Serial.printf("[WEBSOCKET] [%u] Disconnected!\n", num);
+
+    // remove from connected clients
+    for (int i = 0; i < serverClientCount; i++)
+    {
+      if (serverClients[i] == num)
+      {
+        serverClients[i] = NULL;
+      }
+    }
+    break;
+  case WStype_CONNECTED:
+  {
+    IPAddress ip = webSocketServer.remoteIP(num);
+    Serial.printf("[WEBSOCKET] [%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+
+    // send auth request message
+    StaticJsonDocument<200> responseDoc;
+    responseDoc["type"] = "auth_required";
+    String message;
+    serializeJson(responseDoc, message);
+    webSocketServer.sendTXT(num, message);
+  }
+  break;
+  case WStype_TEXT:
+  {
+    // Serial.printf("[%u] get Text: %s\n", num, payload);
+    deserializeJson(wsdoc, payload);
+
+    // response json
+    StaticJsonDocument<200> responseDoc;
+
+    // API AUTHENTICATION
+    if (wsdoc.containsKey("type") && wsdoc["type"].as<String>() == "auth")
+    {
+      if (wsdoc.containsKey("token"))
+      {
+        if (wsdoc["token"].as<String>() == token)
+        {
+          // token ok
+          responseDoc["type"] = "auth_ok";
+          String message;
+          serializeJson(responseDoc, message);
+          webSocketServer.sendTXT(num, message);
+
+          // add client to authorized clients
+          serverClients[serverClientCount] = num;
+          serverClientCount++;
+        }
+        else
+        {
+          // invalid token
+          responseDoc["type"] = "auth";
+          responseDoc["message"] = "Invalid token";
+          String message;
+          serializeJson(responseDoc, message);
+          webSocketServer.sendTXT(num, message);
+        }
+      }
+      else
+      {
+        // token needed
+        responseDoc["type"] = "auth";
+        responseDoc["message"] = "Token needed";
+        String message;
+        serializeJson(responseDoc, message);
+        webSocketServer.sendTXT(num, message);
+      }
+    }
+
+    // COMMANDS
+    for (int i = 0; i < serverClientCount; i++)
+    {
+      if (serverClients[i] != NULL)
+      {
+        // it's on the list, let's see what it wants
+        if (wsdoc.containsKey("type") && wsdoc["type"].as<String>() == "dock") {
+                // Change LED brightness
+                if (wsdoc["command"].as<String>() == "led_brightness_start") {
+                    dockState = 5;
+                    max_brightness = wsdoc["brightness"].as<int>();
+                }
+                if (wsdoc["command"].as<String>() == "led_brightness_stop") {
+                    dockState = 3;
+                    ledcWrite(ledChannel, 0);
+
+                    // save settings
+                    Preferences preferences;
+                    preferences.begin("LED", false);
+                    preferences.putInt("brightness", max_brightness);
+                    preferences.end();
+                }
+
+                // Send IR code
+                if (wsdoc["command"].as<String>() == "ir_send") {
+                    irservice.send(wsdoc["code"].as<String>());
+                }
+
+                // Turn on IR receiving
+                    if (wsdoc["command"].as<String>() == "ir_receive_on") {
+                    irservice.receiving = true;    
+                }
+
+                // Turn off IR receiving
+                if (wsdoc["command"].as<String>() == "ir_receive_off") {
+                    irservice.receiving = false;    
+                }
+
+                // Erase and reset the dock
+                if (wsdoc["command"].as<String>() == "reset") {
+                    Preferences preferences;
+                    preferences.begin("Wifi", false);
+                    preferences.clear();
+                    preferences.end();   
+
+                    delay(500);
+                    
+                    preferences.begin("LED", false);
+                    preferences.clear();
+                    preferences.end();
+
+                    int err;
+                    err=nvs_flash_init();
+                    Serial.println("nvs_flash_init: " + err);
+                    err=nvs_flash_erase();
+                    Serial.println("nvs_flash_erase: " + err);
+
+                    delay(500);
+                    ESP.restart();
+                }
+            }
+      }
+    }
+  }
+  break;
+
+  case WStype_ERROR:
+  case WStype_FRAGMENT_TEXT_START:
+  case WStype_FRAGMENT_BIN_START:
+  case WStype_FRAGMENT:
+  case WStype_FRAGMENT_FIN:
+  case WStype_BIN:
+  case WStype_PING:
+  case WStype_PONG:
+  break;
+  }
+}
+
 
 ////////////////////////////////////////////////////////////////
 // SETUP
@@ -232,7 +399,7 @@ void setup()
     }
     else
     {
-      needsSetup = false;
+      // needsSetup = false;
       dockState = 1;
     }
   }
@@ -245,11 +412,14 @@ void setup()
   preferences.begin("LED", false);
   int led_brightness = preferences.getInt("brightness", 0);
 
-  if (led_brightness == 0) {
+  if (led_brightness == 0)
+  {
     // no settings stored yet. Setting default
     Serial.println("No LED brightness stored, setting default");
     preferences.putInt("brightness", max_brightness);
-  } else {
+  }
+  else
+  {
     Serial.print("LED brightness setting found: ");
     Serial.println(led_brightness);
     max_brightness = led_brightness;
@@ -257,16 +427,11 @@ void setup()
 
   preferences.end();
 
+  // start bluetooth server
   DOCK_BT.begin(hostString);
 
-  // if need setup start the bluetooth server
-  if (dockState == 0)
-  {
-    // Bluetooth begin
-    //DOCK_BT.begin(hostString);
-  }
-  else
-  { // otherwsie connec to the Wifi network
+  if (dockState != 0)
+  { // connect to the Wifi network
     Serial.println("Connecting to wifi");
 
     WiFi.disconnect();
@@ -317,8 +482,14 @@ void setup()
     // initialize the OTA service
     ota.init();
 
-    // connect to remote websocket API
-    wsservice.connect(remote_id);
+    // initialize the IR service
+    irservice.init();
+
+    // start websocket API
+    webSocketServer.begin();
+    webSocketServer.onEvent(webSocketEvent);
+
+    dockState = 2;
   }
 }
 
@@ -328,7 +499,7 @@ void setup()
 void loop()
 {
   // look for wifi credidentials on bluetooth when in setup mode
-  if (DOCK_BT.available() != 0 && dockState == 0)
+  if (DOCK_BT.available() != 0)
   {
     char incomingChar = DOCK_BT.read();
     if (String(incomingChar) == "{")
@@ -348,33 +519,31 @@ void loop()
     }
   }
 
-  if (wsservice.connected && dockState == 1)
-  {
-    dockState = 2; //succesful connection
-  }
-
   if (dockState > 0)
   {
     // OTA update
     ota.handle();
 
-    // Websocket loop
-    wsservice.loop();
+    // websocket server loop
+    webSocketServer.loop();
 
-    // Check if LED brightness is changed
-    if (wsservice.led_setup) {
-      dockState = 5;
-      max_brightness = wsservice.led_brightness;
-    } else if (dockState == 5 && !wsservice.led_setup) {
-      Serial.println("LED brightness setup ended. Saving.");
-      dockState = 3;
-      ledcWrite(ledChannel, 0);
+    //IR Receive
+    if (irservice.receiving)
+    {
+        String code_received = irservice.receive();
 
-      // save settings
-      Preferences preferences;
-      preferences.begin("LED", false);
-      preferences.putInt("brightness", max_brightness);
-      preferences.end();
+        if (code_received != "") {
+        StaticJsonDocument<500> responseDoc;
+        responseDoc["type"] = "dock";
+        responseDoc["command"] = "ir_receive";
+        responseDoc["code"] = code_received;
+
+        String message;
+        serializeJson(responseDoc, message);
+        webSocketServer.broadcastTXT(message);
+        Serial.println(message);
+        Serial.println("OK");    
+        }
     }
   }
 
