@@ -20,7 +20,8 @@ InfraredService irservice;
 WebSocketsServer webSocketServer = WebSocketsServer(946);
 StaticJsonDocument<200> wsdoc;
 String token = "0";
-uint8_t serverClients[10];
+
+uint8_t serverClients[100] = {};
 int serverClientCount = 0;
 
 StaticJsonDocument<200> doc;
@@ -221,7 +222,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     {
       if (serverClients[i] == num)
       {
-        serverClients[i] = NULL;
+        serverClients[i] = -1;
       }
     }
     break;
@@ -262,6 +263,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           // add client to authorized clients
           serverClients[serverClientCount] = num;
           serverClientCount++;
+
         }
         else
         {
@@ -287,18 +289,25 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     // COMMANDS
     for (int i = 0; i < serverClientCount; i++)
     {
-      if (serverClients[i] != NULL)
+      if (serverClients[i] != -1)
       {
+
         // it's on the list, let's see what it wants
         if (wsdoc.containsKey("type") && wsdoc["type"].as<String>() == "dock") {
                 // Change LED brightness
                 if (wsdoc["command"].as<String>() == "led_brightness_start") {
                     dockState = 5;
                     max_brightness = wsdoc["brightness"].as<int>();
+
+                    Serial.println("[WEBSOCKET] Led brightness start");
+                    Serial.print("Brightness: ");
+                    Serial.println(max_brightness);
                 }
                 if (wsdoc["command"].as<String>() == "led_brightness_stop") {
                     dockState = 3;
                     ledcWrite(ledChannel, 0);
+
+                    Serial.println("[WEBSOCKET] Led brightness stop");
 
                     // save settings
                     Preferences preferences;
@@ -309,21 +318,25 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 
                 // Send IR code
                 if (wsdoc["command"].as<String>() == "ir_send") {
+                    Serial.println("[WEBSOCKET] IR Send");
                     irservice.send(wsdoc["code"].as<String>());
                 }
 
                 // Turn on IR receiving
                     if (wsdoc["command"].as<String>() == "ir_receive_on") {
-                    irservice.receiving = true;    
+                    irservice.receiving = true;
+                    Serial.println("[WEBSOCKET] IR Receive on");    
                 }
 
                 // Turn off IR receiving
                 if (wsdoc["command"].as<String>() == "ir_receive_off") {
-                    irservice.receiving = false;    
+                    irservice.receiving = false;
+                    Serial.println("[WEBSOCKET] IR Receive off");       
                 }
 
                 // Erase and reset the dock
                 if (wsdoc["command"].as<String>() == "reset") {
+                    Serial.println("[WEBSOCKET] Reset");   
                     Preferences preferences;
                     preferences.begin("Wifi", false);
                     preferences.clear();
