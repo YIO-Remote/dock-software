@@ -38,6 +38,8 @@ int dockState = 0;
 // 3 - normal operation, LED off, turns on when charging
 // 4 - error
 // 5 - LED brightness setup
+// 6 - normal operation, remote fully charged
+// 7 - normal operation, blinks to indicate remote is low battery
 
 ////////////////////////////////////////////////////////////////
 // BLUETOOTH SETUP
@@ -89,6 +91,11 @@ void setCharging()
   if (digitalRead(CHG_PIN) == LOW)
   {
     charging = true;
+
+    // change dockstate back to normal charging when it was signalling low battery before
+    if (dockState == 7) {
+      dockState = 3;
+    }
   }
   else
   {
@@ -111,9 +118,13 @@ void ledHandleTask(void *pvParameters)
   {
     vTaskDelay(2 / portTICK_PERIOD_MS);
 
-    //if the remote is charging, pulsate the LED
+    // if the remote is charging, pulsate the LED
+    // normal operation, LED off, turns on when charging
     if (dockState == 3 && charging)
     {
+      led_delay = map(max_brightness, 5, 255, 30, 5);
+      led_pause = map(max_brightness, 5, 255, 800, 0);
+
       for (int dutyCycle = 0; dutyCycle <= max_brightness; dutyCycle++)
       {
         // changing the LED brightness with PWM
@@ -132,6 +143,7 @@ void ledHandleTask(void *pvParameters)
       }
       delay(1000);
     }
+    // needs setup
     else if (dockState == 0)
     {
       ledcWrite(ledChannel, 255);
@@ -139,6 +151,7 @@ void ledHandleTask(void *pvParameters)
       ledcWrite(ledChannel, 0);
       delay(800);
     }
+    // connecting to wifi, turning on OTA
     else if (dockState == 1)
     {
       ledcWrite(ledChannel, 255);
@@ -146,6 +159,7 @@ void ledHandleTask(void *pvParameters)
       ledcWrite(ledChannel, 0);
       delay(300);
     }
+    // successful connection
     else if (dockState == 2)
     {
       // Blink the LED 3 times to indicate successful connection
@@ -158,10 +172,29 @@ void ledHandleTask(void *pvParameters)
       }
       dockState = 3;
     }
+    // LED brightness setup
     else if (dockState == 5)
     {
       ledcWrite(ledChannel, max_brightness);
       delay(100);
+    }
+    // normal operation, remote fully charged
+    else if (dockState == 6)
+    {
+      ledcWrite(ledChannel, max_brightness);
+      delay(100);
+    }
+    // normal operation, blinks to indicate remote is low battery
+    else if (dockState == 7)
+    {
+      for (int i = 0; i < 2; i++)
+      {
+        ledcWrite(ledChannel, max_brightness);
+        delay(100);
+        ledcWrite(ledChannel, 0);
+        delay(100);
+      }
+      delay(4000);
     }
   }
 }
@@ -332,6 +365,16 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
                 if (wsdoc["command"].as<String>() == "ir_receive_off") {
                     irservice.receiving = false;
                     Serial.println("[WEBSOCKET] IR Receive off");       
+                }
+
+                // Change state to indicate remote is fully charged
+                if (wsdoc["command"].as<String>() == "remote_charged") {
+                    dockState = 6;      
+                }
+
+                // Change state to indicate remote is low battery
+                if (wsdoc["command"].as<String>() == "remote_lowbattery") {
+                    dockState = 7;      
                 }
 
                 // Erase and reset the dock
