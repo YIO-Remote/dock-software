@@ -203,7 +203,7 @@ public:
 
 public:
     decode_results results;
-    bool receiving = true;
+    bool receiving = false;
 
 private:
     const uint16_t kRecvPin = 22;
