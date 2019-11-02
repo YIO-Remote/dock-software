@@ -74,7 +74,7 @@ int led_pause = map(max_brightness, 5, 255, 800, 0);
 // setting PWM properties
 const int freq = 5000;
 const int ledChannel = 0;
-const int resolution = 10; //Resolution 8, 10, 12, 15
+const int resolution = 8; //Resolution 8, 10, 12, 15
 
 TaskHandle_t LedTask; // core 0 task for handling LED stuff
 
