@@ -49,7 +49,7 @@ bool recordmessage = false; // if true, bluetooth will start recording messages
 ////////////////////////////////////////////////////////////////
 // WIFI SETUP
 ////////////////////////////////////////////////////////////////
-#define CONN_TIMEOUT 20                      // wifi timeout
+#define CONN_TIMEOUT 60                      // wifi timeout
 char hostString[] = "YIO-Dock-xxxxxxxxxxxx"; // stores the hostname
 String ssid;                                 // ssid
 String passwd;                               // password
@@ -441,17 +441,23 @@ void setup()
   preferences.end();
 
   // start bluetooth server
-  DOCK_BT.begin(hostString);
+  if (DOCK_BT.begin(hostString))
+  {
+    Serial.println("Bluetooth successful");
+  }
+
+  delay(1000);
 
   if (dockState != 0)
   { // connect to the Wifi network
     Serial.println("Connecting to wifi");
 
     WiFi.disconnect();
-    // WiFi.enableSTA(true);
-    // WiFi.mode(WIFI_STA);
+    delay(1000);
+    WiFi.enableSTA(true);
+    WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), passwd.c_str());
-
+    
     int connCounter = 0;
 
     while (WiFi.status() != WL_CONNECTED)
@@ -464,10 +470,10 @@ void setup()
       if (connCounter >= CONN_TIMEOUT)
       {
         Serial.println("Connection timeout");
-        Preferences preferences;
-        preferences.begin("Wifi", false);
-        preferences.clear();
-        preferences.end();
+        // Preferences preferences;
+        // preferences.begin("Wifi", false);
+        // preferences.clear();
+        // preferences.end();
 
         ESP.restart();
       }
@@ -491,6 +497,7 @@ void setup()
 
     // Add mDNS service
     MDNS.addService("yio-dock-ota", "tcp", 80);
+    MDNS.addService("yio-dock-api", "tcp", 946);
 
     // initialize the OTA service
     ota.init();
@@ -511,6 +518,14 @@ void setup()
 ////////////////////////////////////////////////////////////////
 void loop()
 {
+  // wifi reconnect
+  if (WiFi.status() != WL_CONNECTED && (millis() > WIFI_CHECK)) {
+    WiFi.disconnect();
+    delay(1000);
+    WiFi.begin(ssid.c_str(), passwd.c_str());
+    WIFI_CHECK = millis() + 30000;
+  }
+
   // look for wifi credidentials on bluetooth when in setup mode
   if (DOCK_BT.available() != 0)
   {
