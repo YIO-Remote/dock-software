@@ -56,7 +56,7 @@ char hostString[] = "YIO-Dock-xxxxxxxxxxxx"; // stores the hostname
 String ssid;                                 // ssid
 String passwd;                               // password
 String remote_id;                            // hostname of the remote
-bool connected = false;
+int prevWifiState = 0;                           // previous WIFI connection state; 0 - disconnected, 1 - connected
 unsigned long WIFI_CHECK = 30000;
 
 ////////////////////////////////////////////////////////////////
@@ -418,6 +418,22 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
+void mDNSInit()
+{
+  if (!MDNS.begin(hostString))
+  {
+    Serial.println("Error setting up MDNS responder!");
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+  Serial.println("mDNS started");
+
+  // Add mDNS service
+  MDNS.addService("yio-dock-ota", "tcp", 80);
+  MDNS.addService("yio-dock-api", "tcp", 946);
+}
 
 ////////////////////////////////////////////////////////////////
 // SETUP
@@ -522,25 +538,15 @@ void setup()
       }
     }
 
+    prevWifiState = 1;
+
     Serial.println("Successful connection");
     Serial.print("Got ip: ");
     Serial.println(WiFi.localIP());
     Serial.print("DNS: ");
     Serial.println(WiFi.dnsIP());
 
-    if (!MDNS.begin(hostString))
-    {
-      Serial.println("Error setting up MDNS responder!");
-      while (1)
-      {
-        delay(1000);
-      }
-    }
-    Serial.println("mDNS started");
-
-    // Add mDNS service
-    MDNS.addService("yio-dock-ota", "tcp", 80);
-    MDNS.addService("yio-dock-api", "tcp", 946);
+    mDNSInit();
 
     // initialize the OTA service
     ota.init();
@@ -563,10 +569,19 @@ void loop()
 {
   // wifi reconnect
   if (WiFi.status() != WL_CONNECTED && (millis() > WIFI_CHECK)) {
+    prevWifiState = 0;
+    MDNS.end();
+
     WiFi.disconnect();
     delay(1000);
     WiFi.begin(ssid.c_str(), passwd.c_str());
     WIFI_CHECK = millis() + 30000;
+  }
+
+  // restart MDNS if wifi is connected again
+  if (WiFi.status() == WL_CONNECTED && prevWifiState == 0) {
+    prevWifiState = 1;
+    mDNSInit();
   }
 
   // look for wifi credidentials on bluetooth when in setup mode
