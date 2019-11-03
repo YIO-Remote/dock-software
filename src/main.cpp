@@ -454,6 +454,12 @@ void setup()
   pinMode(CHG_PIN, INPUT);
   attachInterrupt(CHG_PIN, setCharging, CHANGE);
 
+  // if there's a remote already charging, turn on charging
+  if (digitalRead(CHG_PIN) == LOW)
+  {
+    charging = true;
+  }
+
   // check if there are ssid and password stored
   Preferences preferences;
   preferences.begin("Wifi", false);
@@ -515,6 +521,7 @@ void setup()
     delay(1000);
     WiFi.enableSTA(true);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.begin(ssid.c_str(), passwd.c_str());
     
     int connCounter = 0;
@@ -574,6 +581,9 @@ void loop()
 
     WiFi.disconnect();
     delay(1000);
+    WiFi.enableSTA(true);
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.begin(ssid.c_str(), passwd.c_str());
     WIFI_CHECK = millis() + 30000;
   }
