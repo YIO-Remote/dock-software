@@ -59,6 +59,8 @@ String remote_id;                            // hostname of the remote
 int prevWifiState = 0;                           // previous WIFI connection state; 0 - disconnected, 1 - connected
 unsigned long WIFI_CHECK = 30000;
 
+String friendly_name = "YIO-Dock-xxxxxxxxxxxx";
+
 ////////////////////////////////////////////////////////////////
 // LED SETUP
 ////////////////////////////////////////////////////////////////
@@ -377,6 +379,18 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
                     dockState = 7;      
                 }
 
+                // Change friendly name
+                if (wsdoc["command"].as<String>() == "set_friendly_name") {
+                    friendly_name = wsdoc["friendly_name"].as<String>();
+
+                    Preferences preferences;
+                    preferences.begin("general", false);
+                    preferences.putString("friendly_name", friendly_name);
+                    preferences.end();
+
+                    MDNS.addServiceTxt("yio-dock-api", "tcp", "friendly_name", friendly_name);
+                }
+
                 // Erase and reset the dock
                 if (wsdoc["command"].as<String>() == "reset") {
                     Serial.println("[WEBSOCKET] Reset");   
@@ -433,6 +447,7 @@ void mDNSInit()
   // Add mDNS service
   MDNS.addService("yio-dock-ota", "tcp", 80);
   MDNS.addService("yio-dock-api", "tcp", 946);
+  MDNS.addServiceTxt("yio-dock-api", "tcp", "friendly_name", friendly_name);
 }
 
 ////////////////////////////////////////////////////////////////
@@ -502,7 +517,16 @@ void setup()
     Serial.println(led_brightness);
     max_brightness = led_brightness;
   }
+  preferences.end();
 
+  // Getting friendly name
+  preferences.begin("general", false);
+  friendly_name = preferences.getString("friendly_name", "");
+  if (friendly_name.equals(""))
+  {
+    friendly_name = hostString;
+    preferences.putString("friendly_name", hostString);
+  }
   preferences.end();
 
   // start bluetooth server
