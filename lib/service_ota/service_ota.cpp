@@ -6,43 +6,42 @@ WebServer OTAServer(9999);
 
 void OTA::init()
 {
-    if (this->init_has_run)
-    {
-        return;
-    }
+	if (this->init_has_run)
+	{
+		return;
+	}
 
-    add_http(&OTAServer, "/update");
-    OTAServer.begin(80);
+	add_http(&OTAServer, "/update");
+	OTAServer.begin(80);
 
-    this->init_has_run = true;
+	this->init_has_run = true;
 }
 
 void OTA::handle()
 {
-    if (!this->init_has_run)
-    {
-        OTA::init();
-    }
-    OTAServer.handleClient();
+	if (!this->init_has_run)
+	{
+		OTA::init();
+	}
+	OTAServer.handleClient();
 }
 
 long OTA::max_sketch_size()
 {
-    long ret = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-    return ret;
+	long ret = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+	return ret;
 }
 
 void OTA::add_http(WebServer *server, const char *path)
 {
-    server->on("/", HTTP_GET, [server]() {
-        server->send(200, "text/html", "<h1>OTA Update</h1>");
-    });
+	server->on("/", HTTP_GET, [server]() {
+		server->send(200, "text/html", "<h1>OTA Update</h1>");
+	});
 
-    server->on(path, HTTP_POST, [server,this]() {
+	server->on(path, HTTP_POST, [server, this]() {
 		server->send(200, "text/plain", (Update.hasError()) ? "Update: fail\n" : "Update: OK!\n");
 		delay(500);
-		ESP.restart();
-	}, [server,this]() {
+		ESP.restart(); }, [server, this]() {
 		HTTPUpload& upload = server->upload();
 
 		if (upload.status == UPLOAD_FILE_START) {
@@ -82,8 +81,7 @@ void OTA::add_http(WebServer *server, const char *path)
 			} else {
 				Update.printError(Serial);
 			}
-		}
-	});
+		} });
 
-    server->begin();
+	server->begin();
 }

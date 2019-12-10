@@ -1,31 +1,25 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <ArduinoJson.h>
 #include "BluetoothSerial.h"
 #include <Preferences.h>
 #include <ESPmDNS.h>
-
-// OTA service
+#include "SPIFFS.h"
 #include <service_ota.h>
-OTA ota;
-
-// IR service
 #include <service_ir.h>
-InfraredService irservice;
-
-// websocket server
 #include <WebSocketsServer.h>
+
+OTA ota;
+InfraredService irservice;
 WebSocketsServer webSocketServer = WebSocketsServer(946);
 StaticJsonDocument<200> wsdoc;
 String token = "0";
-
 uint8_t serverClients[100] = {};
 int serverClientCount = 0;
-
 StaticJsonDocument<200> doc;
-// bool needsSetup = true;
 
 ////////////////////////////////////////////////////////////////
 // STATE MACHINE
@@ -55,8 +49,7 @@ bool recordmessage = false; // if true, bluetooth will start recording messages
 char hostString[] = "YIO-Dock-xxxxxxxxxxxx"; // stores the hostname
 String ssid;                                 // ssid
 String passwd;                               // password
-String remote_id;                            // hostname of the remote
-int prevWifiState = 0;                           // previous WIFI connection state; 0 - disconnected, 1 - connected
+int prevWifiState = 0;                       // previous WIFI connection state; 0 - disconnected, 1 - connected
 unsigned long WIFI_CHECK = 30000;
 
 String friendly_name = "YIO-Dock-xxxxxxxxxxxx";
@@ -78,7 +71,8 @@ const int freq = 5000;
 const int ledChannel = 0;
 const int resolution = 8; //Resolution 8, 10, 12, 15
 
-TaskHandle_t LedTask; // core 0 task for handling LED stuff
+TaskHandle_t LedTask;        // core 0 task for handling LED stuff
+TaskHandle_t BTSettingsTask; // core 0 task for handling BluetoothTasks
 
 ////////////////////////////////////////////////////////////////
 // CHARGING INDICATOR PIN
@@ -88,14 +82,15 @@ bool charging = false;
 
 void setCharging()
 {
-  Serial.print("CHG pin is: ");
+  Serial.print(F("CHG pin is: "));
   Serial.println(digitalRead(CHG_PIN));
   if (digitalRead(CHG_PIN) == LOW)
   {
     charging = true;
 
     // change dockstate back to normal charging when it was signalling low battery before
-    if (dockState == 7) {
+    if (dockState == 7)
+    {
       dockState = 3;
     }
   }
@@ -207,23 +202,21 @@ void saveConfig(String data)
 
   if (error)
   {
-    Serial.print(("deserializeJson() failed: "));
+    Serial.print(F("deserializeJson() failed: "));
     Serial.println(error.c_str());
     return;
   }
 
   // check if there is an SSID and password
-  if (doc.containsKey("ssid") && doc.containsKey("password") && doc.containsKey("remote_id"))
+  if (doc.containsKey("ssid") && doc.containsKey("password"))
   {
     ssid = doc["ssid"].as<String>();
     passwd = doc["password"].as<String>();
-    remote_id = doc["remote_id"].as<String>();
 
     Preferences preferences;
     preferences.begin("Wifi", false);
     preferences.putString("ssid", ssid);
     preferences.putString("passwd", passwd);
-    preferences.putString("remote", remote_id);
     preferences.putBool("valid", true);
     preferences.end();
   }
@@ -244,6 +237,44 @@ void saveConfig(String data)
   ESP.restart();
 }
 
+void BTSettingsHandleTask(void *pvParameters)
+{
+  // Wait two seconds before actually enabling bluetooth.
+  // In normal operation the function is closed within a couple of miliseconds. and there's no need to initialize anything.
+  delay(2000);
+
+  //Initiate Bluetooth
+  if (DOCK_BT.begin(hostString))
+  {
+    Serial.println(F("Bluetooth configurator started."));
+  }
+
+  WiFiManager wifiManager;
+
+  for (;;) //Endless loop
+  {
+    char incomingChar = DOCK_BT.read();
+    DOCK_BT.print(incomingChar);
+    if (String(incomingChar) == "{")
+    {
+      recordmessage = true;
+      message = "";
+    }
+    else if (String(incomingChar) == "}")
+    {
+      recordmessage = false;
+      message += "}";
+      //wifiManager.connectWifi("ndk", "1921685254");
+      //ESP.restart();
+      saveConfig(message);
+    }
+    if (recordmessage)
+    {
+      message += String(incomingChar);
+    }
+    delay(100);
+  }
+}
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 {
@@ -298,7 +329,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           // add client to authorized clients
           serverClients[serverClientCount] = num;
           serverClientCount++;
-
         }
         else
         {
@@ -328,93 +358,103 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
       {
 
         // it's on the list, let's see what it wants
-        if (wsdoc.containsKey("type") && wsdoc["type"].as<String>() == "dock") {
-                // Change LED brightness
-                if (wsdoc["command"].as<String>() == "led_brightness_start") {
-                    dockState = 5;
-                    max_brightness = wsdoc["brightness"].as<int>();
+        if (wsdoc.containsKey("type") && wsdoc["type"].as<String>() == "dock")
+        {
+          // Change LED brightness
+          if (wsdoc["command"].as<String>() == "led_brightness_start")
+          {
+            dockState = 5;
+            max_brightness = wsdoc["brightness"].as<int>();
 
-                    Serial.println("[WEBSOCKET] Led brightness start");
-                    Serial.print("Brightness: ");
-                    Serial.println(max_brightness);
-                }
-                if (wsdoc["command"].as<String>() == "led_brightness_stop") {
-                    dockState = 3;
-                    ledcWrite(ledChannel, 0);
+            Serial.println(F("[WEBSOCKET] Led brightness start"));
+            Serial.print(F("Brightness: "));
+            Serial.println(max_brightness);
+          }
+          if (wsdoc["command"].as<String>() == "led_brightness_stop")
+          {
+            dockState = 3;
+            ledcWrite(ledChannel, 0);
 
-                    Serial.println("[WEBSOCKET] Led brightness stop");
+            Serial.println(F("[WEBSOCKET] Led brightness stop"));
 
-                    // save settings
-                    Preferences preferences;
-                    preferences.begin("LED", false);
-                    preferences.putInt("brightness", max_brightness);
-                    preferences.end();
-                }
+            // save settings
+            Preferences preferences;
+            preferences.begin("LED", false);
+            preferences.putInt("brightness", max_brightness);
+            preferences.end();
+          }
 
-                // Send IR code
-                if (wsdoc["command"].as<String>() == "ir_send") {
-                    Serial.println("[WEBSOCKET] IR Send");
-                    irservice.send(wsdoc["code"].as<String>());
-                }
+          // Send IR code
+          if (wsdoc["command"].as<String>() == "ir_send")
+          {
+            Serial.println(F("[WEBSOCKET] IR Send"));
+            irservice.send(wsdoc["code"].as<String>());
+          }
 
-                // Turn on IR receiving
-                    if (wsdoc["command"].as<String>() == "ir_receive_on") {
-                    irservice.receiving = true;
-                    Serial.println("[WEBSOCKET] IR Receive on");    
-                }
+          // Turn on IR receiving
+          if (wsdoc["command"].as<String>() == "ir_receive_on")
+          {
+            irservice.receiving = true;
+            Serial.println(F("[WEBSOCKET] IR Receive on"));
+          }
 
-                // Turn off IR receiving
-                if (wsdoc["command"].as<String>() == "ir_receive_off") {
-                    irservice.receiving = false;
-                    Serial.println("[WEBSOCKET] IR Receive off");       
-                }
+          // Turn off IR receiving
+          if (wsdoc["command"].as<String>() == "ir_receive_off")
+          {
+            irservice.receiving = false;
+            Serial.println(F("[WEBSOCKET] IR Receive off"));
+          }
 
-                // Change state to indicate remote is fully charged
-                if (wsdoc["command"].as<String>() == "remote_charged") {
-                    dockState = 6;      
-                }
+          // Change state to indicate remote is fully charged
+          if (wsdoc["command"].as<String>() == "remote_charged")
+          {
+            dockState = 6;
+          }
 
-                // Change state to indicate remote is low battery
-                if (wsdoc["command"].as<String>() == "remote_lowbattery") {
-                    dockState = 7;      
-                }
+          // Change state to indicate remote is low battery
+          if (wsdoc["command"].as<String>() == "remote_lowbattery")
+          {
+            dockState = 7;
+          }
 
-                // Change friendly name
-                if (wsdoc["command"].as<String>() == "set_friendly_name") {
-                    friendly_name = wsdoc["friendly_name"].as<String>();
+          // Change friendly name
+          if (wsdoc["command"].as<String>() == "set_friendly_name")
+          {
+            friendly_name = wsdoc["friendly_name"].as<String>();
 
-                    Preferences preferences;
-                    preferences.begin("general", false);
-                    preferences.putString("friendly_name", friendly_name);
-                    preferences.end();
+            Preferences preferences;
+            preferences.begin("general", false);
+            preferences.putString("friendly_name", friendly_name);
+            preferences.end();
 
-                    MDNS.addServiceTxt("yio-dock-api", "tcp", "friendly_name", friendly_name);
-                }
+            MDNS.addServiceTxt("yio-dock-api", "tcp", "friendly_name", friendly_name);
+          }
 
-                // Erase and reset the dock
-                if (wsdoc["command"].as<String>() == "reset") {
-                    Serial.println("[WEBSOCKET] Reset");   
-                    Preferences preferences;
-                    preferences.begin("Wifi", false);
-                    preferences.clear();
-                    preferences.end();   
+          // Erase and reset the dock
+          if (wsdoc["command"].as<String>() == "reset")
+          {
+            Serial.println(F("[WEBSOCKET] Reset"));
+            Preferences preferences;
+            preferences.begin("Wifi", false);
+            preferences.clear();
+            preferences.end();
 
-                    delay(500);
-                    
-                    preferences.begin("LED", false);
-                    preferences.clear();
-                    preferences.end();
+            delay(500);
 
-                    int err;
-                    err=nvs_flash_init();
-                    Serial.println("nvs_flash_init: " + err);
-                    err=nvs_flash_erase();
-                    Serial.println("nvs_flash_erase: " + err);
+            preferences.begin("LED", false);
+            preferences.clear();
+            preferences.end();
 
-                    delay(500);
-                    ESP.restart();
-                }
-            }
+            int err;
+            err = nvs_flash_init();
+            Serial.println("nvs_flash_init: " + err);
+            err = nvs_flash_erase();
+            Serial.println("nvs_flash_erase: " + err);
+
+            delay(500);
+            ESP.restart();
+          }
+        }
       }
     }
   }
@@ -428,7 +468,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   case WStype_BIN:
   case WStype_PING:
   case WStype_PONG:
-  break;
+    break;
   }
 }
 
@@ -436,13 +476,13 @@ void mDNSInit()
 {
   if (!MDNS.begin(hostString))
   {
-    Serial.println("Error setting up MDNS responder!");
+    Serial.println(F("Error setting up MDNS responder!"));
     while (1)
     {
       delay(1000);
     }
   }
-  Serial.println("mDNS started");
+  Serial.println(F("mDNS started"));
 
   // Add mDNS service
   MDNS.addService("yio-dock-ota", "tcp", 80);
@@ -450,70 +490,39 @@ void mDNSInit()
   MDNS.addServiceTxt("yio-dock-api", "tcp", "friendly_name", friendly_name);
 }
 
-////////////////////////////////////////////////////////////////
-// SETUP
-////////////////////////////////////////////////////////////////
-void setup()
+void buildHostname()
 {
-  Serial.begin(115200);
-
-  // run LED handling on other core
-  xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
-
   uint8_t baseMac[6];
   esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
   sprintf(hostString, "YIO-Dock-%02X%02X%02X%02X%02X%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+  Serial.print(F("Hostmane: "));
   Serial.println(String(hostString));
+}
 
-  // CHARGING PIN setup
-  pinMode(CHG_PIN, INPUT);
-  attachInterrupt(CHG_PIN, setCharging, CHANGE);
+void printDockInfo()
+{
+  Serial.println(F(""));
+  Serial.println(F("############################################################"));
+  Serial.println(F("## YIO Dock firmware                                      ##"));
+  Serial.println(F("## Visit http://yio-remote.com/ for more information      ##"));
+  Serial.println(F("############################################################"));
+  Serial.println(F(""));
+}
 
-  // if there's a remote already charging, turn on charging
-  if (digitalRead(CHG_PIN) == LOW)
-  {
-    charging = true;
-  }
-
-  // check if there are ssid and password stored
+void handlePreferances()
+{
   Preferences preferences;
-  preferences.begin("Wifi", false);
-  bool hasPref = preferences.getBool("valid", false);
-
-  if (hasPref)
-  {
-    ssid = preferences.getString("ssid", "");
-    passwd = preferences.getString("passwd", "");
-    remote_id = preferences.getString("remote", "");
-
-    if (ssid.equals("") || passwd.equals("") || remote_id.equals(""))
-    {
-      Serial.println("Invalid credidentials");
-    }
-    else
-    {
-      // needsSetup = false;
-      dockState = 1;
-    }
-  }
-
-  preferences.end();
-
-  delay(200);
-
-  // Getting LED brightness
   preferences.begin("LED", false);
   int led_brightness = preferences.getInt("brightness", 0);
 
-  if (led_brightness == 0)
+  if (led_brightness == 0) // no settings stored yet. Setting default
   {
-    // no settings stored yet. Setting default
-    Serial.println("No LED brightness stored, setting default");
+    Serial.println(F("No LED brightness stored, setting default"));
     preferences.putInt("brightness", max_brightness);
   }
   else
   {
-    Serial.print("LED brightness setting found: ");
+    Serial.print(F("LED brightness setting found: "));
     Serial.println(led_brightness);
     max_brightness = led_brightness;
   }
@@ -522,84 +531,23 @@ void setup()
   // Getting friendly name
   preferences.begin("general", false);
   friendly_name = preferences.getString("friendly_name", "");
-  if (friendly_name.equals(""))
+  if (friendly_name.equals("")) // no settings stored yet. Setting default
   {
     friendly_name = hostString;
     preferences.putString("friendly_name", hostString);
   }
-  preferences.end();
-
-  // start bluetooth server
-  if (DOCK_BT.begin(hostString))
+  else // Settings found.
   {
-    Serial.println("Bluetooth successful");
+    Serial.print(F("Friendly name setting found: "));
+    Serial.println(friendly_name);
   }
-
-  delay(1000);
-
-  if (dockState != 0)
-  { // connect to the Wifi network
-    Serial.println("Connecting to wifi");
-
-    WiFi.disconnect();
-    delay(1000);
-    WiFi.enableSTA(true);
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    WiFi.begin(ssid.c_str(), passwd.c_str());
-    
-    int connCounter = 0;
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(300);
-      Serial.print(".");
-      connCounter += 1;
-
-      // if cannot connect, go back to bluetooth server mode
-      if (connCounter >= CONN_TIMEOUT)
-      {
-        Serial.println("Connection timeout");
-        // Preferences preferences;
-        // preferences.begin("Wifi", false);
-        // preferences.clear();
-        // preferences.end();
-
-        ESP.restart();
-      }
-    }
-
-    prevWifiState = 1;
-
-    Serial.println("Successful connection");
-    Serial.print("Got ip: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("DNS: ");
-    Serial.println(WiFi.dnsIP());
-
-    mDNSInit();
-
-    // initialize the OTA service
-    ota.init();
-
-    // initialize the IR service
-    irservice.init();
-
-    // start websocket API
-    webSocketServer.begin();
-    webSocketServer.onEvent(webSocketEvent);
-
-    dockState = 2;
-  }
+  preferences.end();
 }
 
-////////////////////////////////////////////////////////////////
-// LOOP
-////////////////////////////////////////////////////////////////
-void loop()
+void handleWifiReconnect()
 {
-  // wifi reconnect
-  if (WiFi.status() != WL_CONNECTED && (millis() > WIFI_CHECK)) {
+  if (WiFi.status() != WL_CONNECTED && (millis() > WIFI_CHECK))
+  {
     prevWifiState = 0;
     MDNS.end();
 
@@ -613,59 +561,117 @@ void loop()
   }
 
   // restart MDNS if wifi is connected again
-  if (WiFi.status() == WL_CONNECTED && prevWifiState == 0) {
+  if (WiFi.status() == WL_CONNECTED && prevWifiState == 0)
+  {
     prevWifiState = 1;
     mDNSInit();
   }
+}
 
-  // look for wifi credidentials on bluetooth when in setup mode
-  if (DOCK_BT.available() != 0)
+void handleIrReceive()
+{
+  //IR Receive
+  if (irservice.receiving)
   {
-    char incomingChar = DOCK_BT.read();
-    if (String(incomingChar) == "{")
+    String code_received = irservice.receive();
+
+    if (code_received != "")
     {
-      recordmessage = true;
-      message = "";
-    }
-    else if (String(incomingChar) == "}")
-    {
-      recordmessage = false;
-      message += "}";
-      saveConfig(message);
-    }
-    if (recordmessage)
-    {
-      message += String(incomingChar);
+      StaticJsonDocument<500> responseDoc;
+      responseDoc["type"] = "dock";
+      responseDoc["command"] = "ir_receive";
+      responseDoc["code"] = code_received;
+
+      String message;
+      serializeJson(responseDoc, message);
+      webSocketServer.broadcastTXT(message);
+      Serial.println(message);
+      Serial.println(F("OK"));
     }
   }
+}
 
-  if (dockState > 0)
+void setupWiFi()
+{
+  WiFiManager wifiManager; // use wifiManager.resetSettings(); //resetting saved wifi credentials.
+  wifiManager.autoConnect(hostString);
+  ssid = wifiManager.getSSID();
+  passwd = wifiManager.getPassword();
+  dockState = 2;
+  prevWifiState = 1;
+}
+
+void setupChargingPin()
+{
+  pinMode(CHG_PIN, INPUT);
+  attachInterrupt(CHG_PIN, setCharging, CHANGE);
+  if (digitalRead(CHG_PIN) == LOW) // if there's a remote already charging, turn on charging
   {
-    // OTA update
-    ota.handle();
-
-    // websocket server loop
-    webSocketServer.loop();
-
-    //IR Receive
-    if (irservice.receiving)
-    {
-        String code_received = irservice.receive();
-
-        if (code_received != "") {
-        StaticJsonDocument<500> responseDoc;
-        responseDoc["type"] = "dock";
-        responseDoc["command"] = "ir_receive";
-        responseDoc["code"] = code_received;
-
-        String message;
-        serializeJson(responseDoc, message);
-        webSocketServer.broadcastTXT(message);
-        Serial.println(message);
-        Serial.println("OK");    
-        }
-    }
+    charging = true;
   }
+}
 
+////////////////////////////////////////////////////////////////
+// SETUP
+////////////////////////////////////////////////////////////////
+void setup()
+{
+  Serial.begin(115200);
+
+  //Print Dock Info.
+  printDockInfo();
+
+  // Form hostname
+  buildHostname();
+
+  // Run bluetooth serial config thread
+  xTaskCreatePinnedToCore(BTSettingsHandleTask, "BTSettingsTask", 10000, NULL, 1, &BTSettingsTask, 0);
+  // Run LED handling on other core
+  xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
+
+  // WifiManager
+  setupWiFi();
+
+  //Killing Bluetooth task when connected.
+  vTaskDelete(BTSettingsTask);
+
+  // CHARGING PIN setup
+  setupChargingPin();
+
+  // Handle stored Preferences
+  handlePreferances();
+
+  // initialize OTA service
+  ota.init();
+
+  // initialize MDNS
+  mDNSInit();
+
+  // initialize IR service
+  irservice.init();
+
+  // start websocket API
+  webSocketServer.begin();
+  webSocketServer.onEvent(webSocketEvent);
+}
+
+////////////////////////////////////////////////////////////////
+// Main LOOP
+////////////////////////////////////////////////////////////////
+void loop()
+{
+  //Handle wifi disconnects.
+  handleWifiReconnect();
+
+  //Handle OTA updates.
+  ota.handle();
+
+  //Handle websocket connections.
+  webSocketServer.loop();
+
+  //Handle received IR codes.
+  handleIrReceive();
+
+  //Time to rest a bit.
   delay(100);
 }
