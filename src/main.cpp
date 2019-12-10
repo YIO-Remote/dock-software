@@ -21,6 +21,7 @@ const int LED_CHANNEL = 0;
 const int LED_RESOLUTION = 8; //Resolution 8, 10, 12, 15
 #define LED_GPIO 23
 #define CHARGING_GPIO 13
+#define BUTTON_GPIO 0
 
 // Services
 OTA otaService;
@@ -43,7 +44,11 @@ int ledMaxBrightness = 50; // this updates from the remote settings screen
 int ledMapDelay = map(ledMaxBrightness, 5, 255, 30, 5);
 int ledMapPause = map(ledMaxBrightness, 5, 255, 800, 0);
 
+bool initiatFactoryReset = false;
 bool chargingState = false;
+
+const int64_t TIMER_RESET_TIME = 9223372036854775807;
+int64_t buttonTimerSet = TIMER_RESET_TIME;
 
 char dockHostName[] = "YIO-Dock-xxxxxxxxxxxx"; // stores the hostname
 String dockFriendlyName = "YIO-Dock-xxxxxxxxxxxx";
@@ -173,6 +178,14 @@ void ledHandleTask(void *pvParameters)
   }
 }
 
+void rebootDock()
+{
+  Serial.println(F("About to reboot..."));
+  delay(2000);
+  Serial.println(F("Now rebooting..."));
+  ESP.restart();
+}
+
 void saveWiFiJsonToESP(String data)
 {
   StaticJsonDocument<200> wifiJsonDocument;
@@ -200,23 +213,7 @@ void saveWiFiJsonToESP(String data)
     wifiManager.connectWifi(wifiSSID, wifiPSK);
   }
 
-  /*   else if (wifiJsonDocument.containsKey("erase"))
-  { //Erease the preferences
-
-    Serial.println(F("Resetting WiFi credentials."));
-    wifiManager.resetSettings();
-
-    int err;
-    err = nvs_flash_init();
-    Serial.println("nvs_flash_init: " + err);
-    err = nvs_flash_erase();
-    Serial.println("nvs_flash_erase: " + err);
-  } */
-
-  Serial.println(F("About to reboot..."));
-  delay(2000);
-  Serial.println(F("Now rebooting..."));
-  ESP.restart();
+  rebootDock();
 }
 
 void BTSettingsHandleTask(void *pvParameters)
@@ -260,6 +257,29 @@ void BTSettingsHandleTask(void *pvParameters)
     }
     delay(10);
   }
+}
+
+void preferencesReset()
+{
+  Preferences preferences;
+
+  preferences.begin("LED", false);
+  preferences.clear();
+  preferences.end();
+
+  delay(500);
+
+  preferences.begin("general", false);
+  preferences.clear();
+  preferences.end();
+
+  int err;
+  err = nvs_flash_init();
+  Serial.println("nvs_flash_init: " + err);
+  err = nvs_flash_erase();
+  Serial.println("nvs_flash_erase: " + err);
+
+  rebootDock();
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
@@ -404,13 +424,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           }
 
           // Change friendly name
-          if (webSocketJsonDocument["command"].as<String>() == "set_dockFriendlyName")
+          if (webSocketJsonDocument["command"].as<String>() == "set_friendly_name")
           {
-            dockFriendlyName = webSocketJsonDocument["dockFriendlyName"].as<String>();
+            dockFriendlyName = webSocketJsonDocument["set_friendly_name"].as<String>();
 
             Preferences preferences;
             preferences.begin("general", false);
-            preferences.putString("dockFriendlyName", dockFriendlyName);
+            preferences.putString("friendly_name", dockFriendlyName);
             preferences.end();
 
             MDNS.addServiceTxt("yio-dock-api", "tcp", "dockFriendlyName", dockFriendlyName);
@@ -420,25 +440,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           if (webSocketJsonDocument["command"].as<String>() == "reset")
           {
             Serial.println(F("[WEBSOCKET] Reset"));
-            Preferences preferences;
-            preferences.begin("Wifi", false);
-            preferences.clear();
-            preferences.end();
-
-            delay(500);
-
-            preferences.begin("LED", false);
-            preferences.clear();
-            preferences.end();
-
-            int err;
-            err = nvs_flash_init();
-            Serial.println("nvs_flash_init: " + err);
-            err = nvs_flash_erase();
-            Serial.println("nvs_flash_erase: " + err);
-
-            delay(500);
-            ESP.restart();
+            preferencesReset();
           }
         }
       }
@@ -517,11 +519,11 @@ void handlePreferances()
 
   // Getting friendly name
   preferences.begin("general", false);
-  dockFriendlyName = preferences.getString("dockFriendlyName", "");
+  dockFriendlyName = preferences.getString("friendly_name", "");
   if (dockFriendlyName.equals("")) // no settings stored yet. Setting default
   {
     dockFriendlyName = dockHostName;
-    preferences.putString("dockFriendlyName", dockHostName);
+    preferences.putString("friendly_name", dockHostName);
   }
   else // Settings found.
   {
@@ -598,6 +600,53 @@ void setupChargingPin()
   }
 }
 
+void handleFactoryReset()
+{
+  if (initiatFactoryReset)
+  {
+    preferencesReset();
+
+    Serial.println(F("Resetting WiFi credentials."));
+    wifi_config_t conf;
+    memset(&conf, 0, sizeof(wifi_config_t));
+    if (esp_wifi_set_config(WIFI_IF_STA, &conf))
+    {
+      log_e("clear config failed!");
+    }
+
+    rebootDock();
+  }
+}
+
+void handleButtonPress()
+{
+  const int64_t timerCurrent = esp_timer_get_time();
+  if (digitalRead(BUTTON_GPIO) == LOW)
+  {
+    buttonTimerSet = timerCurrent;
+    Serial.print(F("Button is pressed."));
+  }
+  else
+  {
+    const int elapsedTimeInMiliSeconds = ((timerCurrent - buttonTimerSet) / 1000);
+    Serial.print(F("Button held for "));
+    Serial.print(elapsedTimeInMiliSeconds);
+    Serial.println(F(" mili seconds."));
+    buttonTimerSet = TIMER_RESET_TIME;
+
+    if (elapsedTimeInMiliSeconds > 5000 && elapsedTimeInMiliSeconds < 20000) // between 5 and 20 seconds.
+    {
+      initiatFactoryReset = true;
+    }
+  }
+}
+
+void setupButtonPin()
+{
+  pinMode(BUTTON_GPIO, INPUT);
+  attachInterrupt(BUTTON_GPIO, handleButtonPress, CHANGE);
+}
+
 ////////////////////////////////////////////////////////////////
 // SETUP
 ////////////////////////////////////////////////////////////////
@@ -625,6 +674,9 @@ void setup()
   // CHARGING PIN setup
   setupChargingPin();
 
+  // BUTTON PIN setup
+  setupButtonPin();
+
   // Handle stored Preferences
   handlePreferances();
 
@@ -647,18 +699,21 @@ void setup()
 ////////////////////////////////////////////////////////////////
 void loop()
 {
-  //Handle wifi disconnects.
+  // Handle wifi disconnects.
   handleWifiReconnect();
 
-  //Handle OTA updates.
+  // Handle OTA updates.
   otaService.handle();
 
-  //Handle websocket connections.
+  // Handle websocket connections.
   webSocketServer.loop();
 
-  //Handle received IR codes.
+  // Handle received IR codes.
   handleIrReceive();
 
-  //Time to rest.
+  // Handle Factory reset
+  handleFactoryReset();
+
+  // Time to rest
   delay(100);
 }
