@@ -440,7 +440,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           if (webSocketJsonDocument["command"].as<String>() == "reset")
           {
             Serial.println(F("[WEBSOCKET] Reset"));
-            preferencesReset();
+            initiatFactoryReset = true;
           }
         }
       }
