@@ -2,5 +2,8 @@
     "terminal.integrated.env.osx": {
         "PATH": "/Users/marton/.platformio/penv/bin:/Users/marton/.platformio/penv:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/Wireshark.app/Contents/MacOS",
         "PLATFORMIO_CALLER": "vscode"
+    },
+    "files.associations": {
+        "system_error": "cpp"
     }
 }
