@@ -122,7 +122,7 @@ String Config::getHostName()
     return dockHostName;    
 }
 
-// reset
+// reset config to defaults
 void Config::reset()
 {
     Serial.println("[CONFIG] Resetting configuration.");

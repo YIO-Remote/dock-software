@@ -1,41 +1,31 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiManager.h>
-#include <nvs.h>
-#include <nvs_flash.h>
 #include <ArduinoJson.h>
 #include "BluetoothSerial.h"
-#include <Preferences.h>
-#include <ESPmDNS.h>
 #include "SPIFFS.h"
-#include <service_ota.h>
-#include <service_ir.h>
 #include <WebSocketsServer.h>
 
 #include <config.h>
 #include <led_control.h>
 #include <state.h>
+#include <service_ota.h>
+#include <service_ir.h>
+#include <service_wifi.h>
+#include <service_mdns.h>
 
-// Constants.
-const String BT_ACCESS_TOKEN = "0";
-const int WS_SERVICE_PORT = 946;
-const int OTA_SERVICE_PORT = 80;
-const int LED_PWM_FREQ = 5000;
-const int LED_CHANNEL = 0;
-const int LED_RESOLUTION = 8; //Resolution 8, 10, 12, 15
-#define LED_GPIO 23
 #define CHARGING_GPIO 13
 #define BUTTON_GPIO 0
 
 // Services
-Config config;
-LedControl ledControl;
-State state;
-
-OTA otaService;
+Config* config;
+LedControl* ledControl;
+State* state;
+WifiService* wifiservice;
+MDNSService* mdnsservice;
+OTA* otaService;
 InfraredService irService;
-WebSocketsServer webSocketServer = WebSocketsServer(WS_SERVICE_PORT);
+WebSocketsServer webSocketServer = WebSocketsServer(config->API_port);
 BluetoothSerial bluetoothService;
+
 TaskHandle_t LedTask;        // task for handling LED stuff
 TaskHandle_t BTSettingsTask; // task for handling BluetoothTasks
 
@@ -43,17 +33,7 @@ TaskHandle_t BTSettingsTask; // task for handling BluetoothTasks
 uint8_t webSocketClients[100] = {};
 int webSocketClientsCount = 0;
 
-String wifiSSID;            // ssid
-String wifiPSK;             // password
-bool wifiPrevState = false; // previous WIFI connection state; 0 - disconnected, 1 - connected
-unsigned long wifiCheckTimedUl = 30000;
-
-int ledMaxBrightness = 50; // this updates from the remote settings screen
-int ledMapDelay = map(ledMaxBrightness, 5, 255, 30, 5);
-int ledMapPause = map(ledMaxBrightness, 5, 255, 800, 0);
-
 bool initiatFactoryReset = false;
-bool chargingState = false;
 
 const int64_t TIMER_RESET_TIME = 9223372036854775807;
 int64_t buttonTimerSet = TIMER_RESET_TIME;
@@ -67,17 +47,17 @@ void setCharging()
   Serial.println(digitalRead(CHARGING_GPIO));
   if (digitalRead(CHARGING_GPIO) == LOW)
   {
-    state.currentState = State::NORMAL_CHARGING;
+    state->currentState = State::NORMAL_CHARGING;
 
-    // change state.currentState back to normal charging when it was signalling low battery before
-    if (state.currentState == State::NORMAL_LOWBATTERY)
+    // change state->currentState back to normal charging when it was signalling low battery before
+    if (state->currentState == State::NORMAL_LOWBATTERY)
     {
-      state.currentState = State::NORMAL_CHARGING;
+      state->currentState = State::NORMAL_CHARGING;
     }
   }
   else
   {
-    state.currentState = State::NORMAL;
+    state->currentState = State::NORMAL;
   }
 }
 
@@ -86,108 +66,8 @@ void setCharging()
 ////////////////////////////////////////////////////////////////
 void ledHandleTask(void *pvParameters)
 {
-  ledControl.loop();
+  ledControl->loop();
 }
-// void ledHandleTask(void *pvParameters)
-// {
-//   // LED setup
-//   pinMode(LED_GPIO, OUTPUT);
-
-//   ledcSetup(LED_CHANNEL, LED_PWM_FREQ, LED_RESOLUTION);
-//   ledcAttachPin(LED_GPIO, LED_CHANNEL);
-
-//   while (1)
-//   {
-//     vTaskDelay(2 / portTICK_PERIOD_MS);
-
-//     // if the remote is charging, pulsate the LED
-//     // normal operation, LED off, turns on when charging
-//     if (state.currentState == 3 && chargingState)
-//     {
-//       ledMapDelay = map(ledMaxBrightness, 5, 255, 30, 5);
-//       ledMapPause = map(ledMaxBrightness, 5, 255, 800, 0);
-
-//       for (int dutyCycle = 0; dutyCycle <= ledMaxBrightness; dutyCycle++)
-//       {
-//         // changing the LED brightness with PWM
-//         ledcWrite(LED_CHANNEL, dutyCycle);
-//         delay(ledMapDelay);
-//       }
-
-//       delay(ledMapPause);
-
-//       // decrease the LED brightness
-//       for (int dutyCycle = ledMaxBrightness; dutyCycle >= 0; dutyCycle--)
-//       {
-//         // changing the LED brightness with PWM
-//         ledcWrite(LED_CHANNEL, dutyCycle);
-//         delay(ledMapDelay);
-//       }
-//       delay(1000);
-//     }
-//     // needs setup
-//     else if (state.currentState == 0)
-//     {
-//       ledcWrite(LED_CHANNEL, 255);
-//       delay(800);
-//       ledcWrite(LED_CHANNEL, 0);
-//       delay(800);
-//     }
-//     // connecting to wifi, turning on OTA
-//     else if (state.currentState == 1)
-//     {
-//       ledcWrite(LED_CHANNEL, 255);
-//       delay(300);
-//       ledcWrite(LED_CHANNEL, 0);
-//       delay(300);
-//     }
-//     // successful connection
-//     else if (state.currentState == 2)
-//     {
-//       // Blink the LED 3 times to indicate successful connection
-//       for (int i = 0; i < 4; i++)
-//       {
-//         ledcWrite(LED_CHANNEL, 255);
-//         delay(100);
-//         ledcWrite(LED_CHANNEL, 0);
-//         delay(100);
-//       }
-//       state.currentState = 3;
-//     }
-//     // LED brightness setup
-//     else if (state.currentState == 5)
-//     {
-//       ledcWrite(LED_CHANNEL, ledMaxBrightness);
-//       delay(100);
-//     }
-//     // normal operation, remote fully charged
-//     else if (state.currentState == 6)
-//     {
-//       ledcWrite(LED_CHANNEL, ledMaxBrightness);
-//       delay(100);
-//     }
-//     // normal operation, blinks to indicate remote is low battery
-//     else if (state.currentState == 7)
-//     {
-//       for (int i = 0; i < 2; i++)
-//       {
-//         ledcWrite(LED_CHANNEL, ledMaxBrightness);
-//         delay(100);
-//         ledcWrite(LED_CHANNEL, 0);
-//         delay(100);
-//       }
-//       delay(4000);
-//     }
-//   }
-// }
-
-// void rebootDock()
-// {
-//   Serial.println(F("About to reboot..."));
-//   delay(2000);
-//   Serial.println(F("Now rebooting..."));
-//   ESP.restart();
-// }
 
 void saveWiFiJsonToESP(String data)
 {
@@ -204,19 +84,19 @@ void saveWiFiJsonToESP(String data)
 
   if (wifiJsonDocument.containsKey("ssid") && wifiJsonDocument.containsKey("password"))
   {
-    wifiSSID = wifiJsonDocument["ssid"].as<String>();
-    wifiPSK = wifiJsonDocument["password"].as<String>();
+    config->setWifiSsid(wifiJsonDocument["ssid"].as<String>());
+    config->setWifiPassword(wifiJsonDocument["password"].as<String>());
 
-    Serial.println("Saving SSID:" + wifiSSID + " PASS:" + wifiPSK);
+    Serial.println("Saving SSID:" + config->getWifiSsid() + " PASS:" + config->getWifiPassword());
 
     Serial.println(F("Disconnecting any current WiFi connections."));
     WiFi.disconnect();
     delay(1000);
     Serial.println(F("Connecting to provided WiFi credentials."));
-    wifiManager.connectWifi(wifiSSID, wifiPSK);
+    wifiservice->connect(config->getWifiSsid(), config->getWifiPassword());
   }
 
-  state.reboot();
+  state->reboot();
 }
 
 void BTSettingsHandleTask(void *pvParameters)
@@ -229,7 +109,7 @@ void BTSettingsHandleTask(void *pvParameters)
   bool interestingData = false; // Data between { and } chars.
 
   //Initiate Bluetooth
-  if (bluetoothService.begin(config.getHostName()))
+  if (bluetoothService.begin(config->getHostName()))
   {
     Serial.println(F("Bluetooth configurator started."));
   }
@@ -260,29 +140,6 @@ void BTSettingsHandleTask(void *pvParameters)
     }
     delay(10);
   }
-}
-
-void preferencesReset()
-{
-  Preferences preferences;
-
-  preferences.begin("LED", false);
-  preferences.clear();
-  preferences.end();
-
-  delay(500);
-
-  preferences.begin("general", false);
-  preferences.clear();
-  preferences.end();
-
-  int err;
-  err = nvs_flash_init();
-  Serial.println("nvs_flash_init: " + err);
-  err = nvs_flash_erase();
-  Serial.println("nvs_flash_erase: " + err);
-
-  state.reboot();
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
@@ -327,7 +184,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     {
       if (webSocketJsonDocument.containsKey("token"))
       {
-        if (webSocketJsonDocument["token"].as<String>() == BT_ACCESS_TOKEN)
+        if (webSocketJsonDocument["token"].as<String>() == config->token)
         {
           // token ok
           responseDoc["type"] = "auth_ok";
@@ -372,7 +229,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           // Change LED brightness
           if (webSocketJsonDocument["command"].as<String>() == "led_brightness_start")
           {
-            state.currentState = State::LED_SETUP;
+            state->currentState = State::LED_SETUP;
             ledMaxBrightness = webSocketJsonDocument["brightness"].as<int>();
 
             Serial.println(F("[WEBSOCKET] Led brightness start"));
@@ -381,7 +238,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           }
           if (webSocketJsonDocument["command"].as<String>() == "led_brightness_stop")
           {
-            state.currentState = State::NORMAL;
+            state->currentState = State::NORMAL;
             ledcWrite(LED_CHANNEL, 0);
 
             Serial.println(F("[WEBSOCKET] Led brightness stop"));
@@ -417,13 +274,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           // Change state to indicate remote is fully charged
           if (webSocketJsonDocument["command"].as<String>() == "remote_charged")
           {
-            state.currentState = State::NORMAL_FULLYCHARGED;
+            state->currentState = State::NORMAL_FULLYCHARGED;
           }
 
           // Change state to indicate remote is low battery
           if (webSocketJsonDocument["command"].as<String>() == "remote_lowbattery")
           {
-            state.currentState = State::NORMAL_LOWBATTERY;
+            state->currentState = State::NORMAL_LOWBATTERY;
           }
 
           // Change friendly name
@@ -463,83 +320,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
-void mDNSInit()
-{
-  if (!MDNS.begin(config.getHostName().c_str()))
-  {
-    Serial.println(F("Error setting up MDNS responder!"));
-    while (1)
-    {
-      delay(1000);
-    }
-  }
-  Serial.println(F("mDNS started"));
-
-  // Add mDNS service
-  MDNS.addService("yio-dock-ota", "tcp", OTA_SERVICE_PORT);
-  MDNS.addService("yio-dock-api", "tcp", WS_SERVICE_PORT);
-  MDNS.addServiceTxt("yio-dock-api", "tcp", "dockFriendlyName", dockFriendlyName);
-}
-
-void handlePreferances()
-{
-  Preferences preferences;
-  preferences.begin("LED", false);
-  int led_brightness = preferences.getInt("brightness", 0);
-
-  if (led_brightness == 0) // no settings stored yet. Setting default
-  {
-    Serial.println(F("No LED brightness stored, setting default"));
-    preferences.putInt("brightness", ledMaxBrightness);
-  }
-  else
-  {
-    Serial.print(F("LED brightness setting found: "));
-    Serial.println(led_brightness);
-    ledMaxBrightness = led_brightness;
-  }
-  preferences.end();
-
-  // Getting friendly name
-  preferences.begin("general", false);
-  dockFriendlyName = preferences.getString("friendly_name", "");
-  if (dockFriendlyName.equals("")) // no settings stored yet. Setting default
-  {
-    dockFriendlyName = dockHostName;
-    preferences.putString("friendly_name", dockHostName);
-  }
-  else // Settings found.
-  {
-    Serial.print(F("Friendly name setting found: "));
-    Serial.println(dockFriendlyName);
-  }
-  preferences.end();
-}
-
-void handleWifiReconnect()
-{
-  if (WiFi.status() != WL_CONNECTED && (millis() > wifiCheckTimedUl))
-  {
-    wifiPrevState = false;
-    MDNS.end();
-
-    WiFi.disconnect();
-    delay(1000);
-    WiFi.enableSTA(true);
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    WiFi.begin(wifiSSID.c_str(), wifiPSK.c_str());
-    wifiCheckTimedUl = millis() + 30000;
-  }
-
-  // restart MDNS if wifi is connected again
-  if (WiFi.status() == WL_CONNECTED && wifiPrevState == false)
-  {
-    wifiPrevState = true;
-    mDNSInit();
-  }
-}
-
 void handleIrReceive()
 {
   //IR Receive
@@ -563,23 +343,13 @@ void handleIrReceive()
   }
 }
 
-void initiateWiFi()
-{
-  WiFiManager wifiManager; // use wifiManager.resetSettings(); //resetting saved wifi credentials.
-  wifiManager.autoConnect(config.getHostName().c_str());
-  wifiSSID = wifiManager.getSSID();
-  wifiPSK = wifiManager.getPassword();
-  wifiPrevState = true;
-  state.currentState = State::CONNECTING;
-}
-
 void setupChargingPin()
 {
   pinMode(CHARGING_GPIO, INPUT);
   attachInterrupt(CHARGING_GPIO, setCharging, CHANGE);
   if (digitalRead(CHARGING_GPIO) == LOW) // if there's a remote already charging, turn on charging
   {
-    chargingState = true;
+    state->currentState = State::NORMAL_CHARGING;
   }
 }
 
@@ -587,7 +357,7 @@ void handleFactoryReset()
 {
   if (initiatFactoryReset)
   {
-    preferencesReset();
+    config->reset();
 
     Serial.println(F("Resetting WiFi credentials."));
     wifi_config_t conf;
@@ -597,7 +367,7 @@ void handleFactoryReset()
       log_e("clear config failed!");
     }
 
-    state.reboot();
+    state->reboot();
   }
 }
 
@@ -638,7 +408,7 @@ void setup()
   Serial.begin(115200);
 
   //Print Dock Info.
-  state.printDockInfo();
+  state->printDockInfo();
 
   // Run bluetooth serial config thread
   xTaskCreatePinnedToCore(BTSettingsHandleTask, "BTSettingsTask", 10000, NULL, 1, &BTSettingsTask, 0);
@@ -646,7 +416,7 @@ void setup()
   xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
 
   // initiate WiFi/WifiManager
-  initiateWiFi();
+  wifiservice->initiateWifi();
 
   //Killing Bluetooth task when connected.
   vTaskDelete(BTSettingsTask);
@@ -657,14 +427,14 @@ void setup()
   // BUTTON PIN setup
   setupButtonPin();
 
-  // Handle stored Preferences
-  handlePreferances();
+  // Set the max brightness from saved settings
+  ledControl->setLedMaxBrightness(config->getLedBrightness());
 
   // initialize OTA service
-  otaService.init();
+  otaService->init();
 
   // initialize MDNS
-  mDNSInit();
+  mdnsservice->init();
 
   // initialize IR service
   irService.init();
@@ -680,10 +450,10 @@ void setup()
 void loop()
 {
   // Handle wifi disconnects.
-  handleWifiReconnect();
+  wifiservice->handleReconnect();
 
   // Handle OTA updates.
-  otaService.handle();
+  otaService->handle();
 
   // Handle websocket connections.
   webSocketServer.loop();
