@@ -12,6 +12,8 @@
 #include <service_ir.h>
 #include <WebSocketsServer.h>
 
+#include <config.h>
+
 // Constants.
 const String BT_ACCESS_TOKEN = "0";
 const int WS_SERVICE_PORT = 946;
@@ -24,6 +26,7 @@ const int LED_RESOLUTION = 8; //Resolution 8, 10, 12, 15
 #define BUTTON_GPIO 0
 
 // Services
+Config config;
 OTA otaService;
 InfraredService irService;
 WebSocketsServer webSocketServer = WebSocketsServer(WS_SERVICE_PORT);
