@@ -1,8 +1,12 @@
 #include "config.h"
 
+Config* Config::s_instance = nullptr;
+
 // initializing config
 Config::Config()
 {
+    s_instance = this;
+
     // if no LED brightness setting, set default
     if (getLedBrightness() == 0)
     {
@@ -13,11 +17,7 @@ Config::Config()
     if (getFriendlyName() == "")
     {
         // get the default friendly name
-        char dockHostName[] = "YIO-Dock-xxxxxxxxxxxx";
-        uint8_t baseMac[6];
-        esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
-        sprintf(dockHostName, "YIO-Dock-%02X%02X%02X%02X%02X%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
-        setFriendlyName(dockHostName);
+       setFriendlyName(getHostName());
     }
 }
 
@@ -110,6 +110,16 @@ void Config::setWifiPassword(String value)
     m_preferences.begin("wifi", false);
     m_preferences.putString("password", value);
     m_preferences.end();
+}
+
+// get hostname
+String Config::getHostName()
+{
+    char dockHostName[] = "YIO-Dock-xxxxxxxxxxxx";
+    uint8_t baseMac[6];
+    esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
+    sprintf(dockHostName, "YIO-Dock-%02X%02X%02X%02X%02X%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+    return dockHostName;    
 }
 
 // reset

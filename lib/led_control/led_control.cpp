@@ -6,7 +6,7 @@ LedControl::LedControl()
 
 }
 
-void LedControl::loop(void *pvParameters)
+void LedControl::loop()
 {
     // LED setup
   pinMode(m_ledGPIO, OUTPUT);

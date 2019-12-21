@@ -30,6 +30,7 @@ const int LED_RESOLUTION = 8; //Resolution 8, 10, 12, 15
 // Services
 Config config;
 LedControl ledControl;
+State state;
 
 OTA otaService;
 InfraredService irService;
@@ -59,15 +60,6 @@ int64_t buttonTimerSet = TIMER_RESET_TIME;
 
 char dockHostName[] = "YIO-Dock-xxxxxxxxxxxx"; // stores the hostname
 String dockFriendlyName = "YIO-Dock-xxxxxxxxxxxx";
-int dockState = 0;
-// 0 - needs setup
-// 1 - connecting to wifi, turning on OTA
-// 2 - successful connection
-// 3 - normal operation, LED off, turns on when charging
-// 4 - error
-// 5 - LED brightness setup
-// 6 - normal operation, remote fully charged
-// 7 - normal operation, blinks to indicate remote is low battery
 
 void setCharging()
 {
@@ -75,17 +67,17 @@ void setCharging()
   Serial.println(digitalRead(CHARGING_GPIO));
   if (digitalRead(CHARGING_GPIO) == LOW)
   {
-    chargingState = true;
+    state.currentState = State::NORMAL_CHARGING;
 
-    // change dockstate back to normal charging when it was signalling low battery before
-    if (dockState == 7)
+    // change state.currentState back to normal charging when it was signalling low battery before
+    if (state.currentState == State::NORMAL_LOWBATTERY)
     {
-      dockState = 3;
+      state.currentState = State::NORMAL_CHARGING;
     }
   }
   else
   {
-    chargingState = false;
+    state.currentState = State::NORMAL;
   }
 }
 
@@ -94,104 +86,108 @@ void setCharging()
 ////////////////////////////////////////////////////////////////
 void ledHandleTask(void *pvParameters)
 {
-  // LED setup
-  pinMode(LED_GPIO, OUTPUT);
-
-  ledcSetup(LED_CHANNEL, LED_PWM_FREQ, LED_RESOLUTION);
-  ledcAttachPin(LED_GPIO, LED_CHANNEL);
-
-  while (1)
-  {
-    vTaskDelay(2 / portTICK_PERIOD_MS);
-
-    // if the remote is charging, pulsate the LED
-    // normal operation, LED off, turns on when charging
-    if (dockState == 3 && chargingState)
-    {
-      ledMapDelay = map(ledMaxBrightness, 5, 255, 30, 5);
-      ledMapPause = map(ledMaxBrightness, 5, 255, 800, 0);
-
-      for (int dutyCycle = 0; dutyCycle <= ledMaxBrightness; dutyCycle++)
-      {
-        // changing the LED brightness with PWM
-        ledcWrite(LED_CHANNEL, dutyCycle);
-        delay(ledMapDelay);
-      }
-
-      delay(ledMapPause);
-
-      // decrease the LED brightness
-      for (int dutyCycle = ledMaxBrightness; dutyCycle >= 0; dutyCycle--)
-      {
-        // changing the LED brightness with PWM
-        ledcWrite(LED_CHANNEL, dutyCycle);
-        delay(ledMapDelay);
-      }
-      delay(1000);
-    }
-    // needs setup
-    else if (dockState == 0)
-    {
-      ledcWrite(LED_CHANNEL, 255);
-      delay(800);
-      ledcWrite(LED_CHANNEL, 0);
-      delay(800);
-    }
-    // connecting to wifi, turning on OTA
-    else if (dockState == 1)
-    {
-      ledcWrite(LED_CHANNEL, 255);
-      delay(300);
-      ledcWrite(LED_CHANNEL, 0);
-      delay(300);
-    }
-    // successful connection
-    else if (dockState == 2)
-    {
-      // Blink the LED 3 times to indicate successful connection
-      for (int i = 0; i < 4; i++)
-      {
-        ledcWrite(LED_CHANNEL, 255);
-        delay(100);
-        ledcWrite(LED_CHANNEL, 0);
-        delay(100);
-      }
-      dockState = 3;
-    }
-    // LED brightness setup
-    else if (dockState == 5)
-    {
-      ledcWrite(LED_CHANNEL, ledMaxBrightness);
-      delay(100);
-    }
-    // normal operation, remote fully charged
-    else if (dockState == 6)
-    {
-      ledcWrite(LED_CHANNEL, ledMaxBrightness);
-      delay(100);
-    }
-    // normal operation, blinks to indicate remote is low battery
-    else if (dockState == 7)
-    {
-      for (int i = 0; i < 2; i++)
-      {
-        ledcWrite(LED_CHANNEL, ledMaxBrightness);
-        delay(100);
-        ledcWrite(LED_CHANNEL, 0);
-        delay(100);
-      }
-      delay(4000);
-    }
-  }
+  ledControl.loop();
 }
+// void ledHandleTask(void *pvParameters)
+// {
+//   // LED setup
+//   pinMode(LED_GPIO, OUTPUT);
 
-void rebootDock()
-{
-  Serial.println(F("About to reboot..."));
-  delay(2000);
-  Serial.println(F("Now rebooting..."));
-  ESP.restart();
-}
+//   ledcSetup(LED_CHANNEL, LED_PWM_FREQ, LED_RESOLUTION);
+//   ledcAttachPin(LED_GPIO, LED_CHANNEL);
+
+//   while (1)
+//   {
+//     vTaskDelay(2 / portTICK_PERIOD_MS);
+
+//     // if the remote is charging, pulsate the LED
+//     // normal operation, LED off, turns on when charging
+//     if (state.currentState == 3 && chargingState)
+//     {
+//       ledMapDelay = map(ledMaxBrightness, 5, 255, 30, 5);
+//       ledMapPause = map(ledMaxBrightness, 5, 255, 800, 0);
+
+//       for (int dutyCycle = 0; dutyCycle <= ledMaxBrightness; dutyCycle++)
+//       {
+//         // changing the LED brightness with PWM
+//         ledcWrite(LED_CHANNEL, dutyCycle);
+//         delay(ledMapDelay);
+//       }
+
+//       delay(ledMapPause);
+
+//       // decrease the LED brightness
+//       for (int dutyCycle = ledMaxBrightness; dutyCycle >= 0; dutyCycle--)
+//       {
+//         // changing the LED brightness with PWM
+//         ledcWrite(LED_CHANNEL, dutyCycle);
+//         delay(ledMapDelay);
+//       }
+//       delay(1000);
+//     }
+//     // needs setup
+//     else if (state.currentState == 0)
+//     {
+//       ledcWrite(LED_CHANNEL, 255);
+//       delay(800);
+//       ledcWrite(LED_CHANNEL, 0);
+//       delay(800);
+//     }
+//     // connecting to wifi, turning on OTA
+//     else if (state.currentState == 1)
+//     {
+//       ledcWrite(LED_CHANNEL, 255);
+//       delay(300);
+//       ledcWrite(LED_CHANNEL, 0);
+//       delay(300);
+//     }
+//     // successful connection
+//     else if (state.currentState == 2)
+//     {
+//       // Blink the LED 3 times to indicate successful connection
+//       for (int i = 0; i < 4; i++)
+//       {
+//         ledcWrite(LED_CHANNEL, 255);
+//         delay(100);
+//         ledcWrite(LED_CHANNEL, 0);
+//         delay(100);
+//       }
+//       state.currentState = 3;
+//     }
+//     // LED brightness setup
+//     else if (state.currentState == 5)
+//     {
+//       ledcWrite(LED_CHANNEL, ledMaxBrightness);
+//       delay(100);
+//     }
+//     // normal operation, remote fully charged
+//     else if (state.currentState == 6)
+//     {
+//       ledcWrite(LED_CHANNEL, ledMaxBrightness);
+//       delay(100);
+//     }
+//     // normal operation, blinks to indicate remote is low battery
+//     else if (state.currentState == 7)
+//     {
+//       for (int i = 0; i < 2; i++)
+//       {
+//         ledcWrite(LED_CHANNEL, ledMaxBrightness);
+//         delay(100);
+//         ledcWrite(LED_CHANNEL, 0);
+//         delay(100);
+//       }
+//       delay(4000);
+//     }
+//   }
+// }
+
+// void rebootDock()
+// {
+//   Serial.println(F("About to reboot..."));
+//   delay(2000);
+//   Serial.println(F("Now rebooting..."));
+//   ESP.restart();
+// }
 
 void saveWiFiJsonToESP(String data)
 {
@@ -220,7 +216,7 @@ void saveWiFiJsonToESP(String data)
     wifiManager.connectWifi(wifiSSID, wifiPSK);
   }
 
-  rebootDock();
+  state.reboot();
 }
 
 void BTSettingsHandleTask(void *pvParameters)
@@ -233,7 +229,7 @@ void BTSettingsHandleTask(void *pvParameters)
   bool interestingData = false; // Data between { and } chars.
 
   //Initiate Bluetooth
-  if (bluetoothService.begin(dockHostName))
+  if (bluetoothService.begin(config.getHostName()))
   {
     Serial.println(F("Bluetooth configurator started."));
   }
@@ -286,7 +282,7 @@ void preferencesReset()
   err = nvs_flash_erase();
   Serial.println("nvs_flash_erase: " + err);
 
-  rebootDock();
+  state.reboot();
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
@@ -376,7 +372,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           // Change LED brightness
           if (webSocketJsonDocument["command"].as<String>() == "led_brightness_start")
           {
-            dockState = 5;
+            state.currentState = State::LED_SETUP;
             ledMaxBrightness = webSocketJsonDocument["brightness"].as<int>();
 
             Serial.println(F("[WEBSOCKET] Led brightness start"));
@@ -385,7 +381,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           }
           if (webSocketJsonDocument["command"].as<String>() == "led_brightness_stop")
           {
-            dockState = 3;
+            state.currentState = State::NORMAL;
             ledcWrite(LED_CHANNEL, 0);
 
             Serial.println(F("[WEBSOCKET] Led brightness stop"));
@@ -421,13 +417,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
           // Change state to indicate remote is fully charged
           if (webSocketJsonDocument["command"].as<String>() == "remote_charged")
           {
-            dockState = 6;
+            state.currentState = State::NORMAL_FULLYCHARGED;
           }
 
           // Change state to indicate remote is low battery
           if (webSocketJsonDocument["command"].as<String>() == "remote_lowbattery")
           {
-            dockState = 7;
+            state.currentState = State::NORMAL_LOWBATTERY;
           }
 
           // Change friendly name
@@ -469,7 +465,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 
 void mDNSInit()
 {
-  if (!MDNS.begin(dockHostName))
+  if (!MDNS.begin(config.getHostName().c_str()))
   {
     Serial.println(F("Error setting up MDNS responder!"));
     while (1)
@@ -483,26 +479,6 @@ void mDNSInit()
   MDNS.addService("yio-dock-ota", "tcp", OTA_SERVICE_PORT);
   MDNS.addService("yio-dock-api", "tcp", WS_SERVICE_PORT);
   MDNS.addServiceTxt("yio-dock-api", "tcp", "dockFriendlyName", dockFriendlyName);
-}
-
-void buildHostname()
-{
-  uint8_t baseMac[6];
-  esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
-  sprintf(dockHostName, "YIO-Dock-%02X%02X%02X%02X%02X%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
-  Serial.print(F("Hostmane: "));
-  Serial.println(String(dockHostName));
-}
-
-void printDockInfo()
-{
-  Serial.println(F(""));
-  Serial.println(F(""));
-  Serial.println(F("############################################################"));
-  Serial.println(F("## YIO Dock firmware                                      ##"));
-  Serial.println(F("## Visit http://yio-remote.com/ for more information      ##"));
-  Serial.println(F("############################################################"));
-  Serial.println(F(""));
 }
 
 void handlePreferances()
@@ -590,11 +566,11 @@ void handleIrReceive()
 void initiateWiFi()
 {
   WiFiManager wifiManager; // use wifiManager.resetSettings(); //resetting saved wifi credentials.
-  wifiManager.autoConnect(dockHostName);
+  wifiManager.autoConnect(config.getHostName().c_str());
   wifiSSID = wifiManager.getSSID();
   wifiPSK = wifiManager.getPassword();
   wifiPrevState = true;
-  dockState = 2;
+  state.currentState = State::CONNECTING;
 }
 
 void setupChargingPin()
@@ -621,7 +597,7 @@ void handleFactoryReset()
       log_e("clear config failed!");
     }
 
-    rebootDock();
+    state.reboot();
   }
 }
 
@@ -662,16 +638,12 @@ void setup()
   Serial.begin(115200);
 
   //Print Dock Info.
-  printDockInfo();
-
-  // Form hostname
-  buildHostname();
+  state.printDockInfo();
 
   // Run bluetooth serial config thread
   xTaskCreatePinnedToCore(BTSettingsHandleTask, "BTSettingsTask", 10000, NULL, 1, &BTSettingsTask, 0);
   // Run LED handling on other core
-  //xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
-  xTaskCreatePinnedToCore(ledControl.loop, "LedTask", 10000, NULL, 1, &LedTask, 0);
+  xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
 
   // initiate WiFi/WifiManager
   initiateWiFi();

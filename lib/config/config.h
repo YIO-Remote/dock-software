@@ -27,12 +27,21 @@ public:
     String      getWifiPassword();
     void        setWifiPassword(String value);
 
+    // get hostname
+    String      getHostName();
+
     // reset config
     void        reset();
+
+    static Config*           getInstance()
+    { return s_instance; }
 
 private:
     Preferences m_preferences;
     int         m_defaultLedBrightness = 50;
+
+    private:
+    static Config*           s_instance;
 };
 
 #endif

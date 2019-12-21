@@ -9,7 +9,7 @@ public:
     explicit LedControl();
     virtual ~LedControl(){}
 
-    void loop(void *pvParameters);
+    void loop();
 
     void setLedMaxBrightness(int value);
 
