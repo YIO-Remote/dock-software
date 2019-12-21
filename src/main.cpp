@@ -13,6 +13,8 @@
 #include <WebSocketsServer.h>
 
 #include <config.h>
+#include <led_control.h>
+#include <state.h>
 
 // Constants.
 const String BT_ACCESS_TOKEN = "0";
@@ -27,6 +29,8 @@ const int LED_RESOLUTION = 8; //Resolution 8, 10, 12, 15
 
 // Services
 Config config;
+LedControl ledControl;
+
 OTA otaService;
 InfraredService irService;
 WebSocketsServer webSocketServer = WebSocketsServer(WS_SERVICE_PORT);
@@ -666,7 +670,8 @@ void setup()
   // Run bluetooth serial config thread
   xTaskCreatePinnedToCore(BTSettingsHandleTask, "BTSettingsTask", 10000, NULL, 1, &BTSettingsTask, 0);
   // Run LED handling on other core
-  xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
+  //xTaskCreatePinnedToCore(ledHandleTask, "LedTask", 10000, NULL, 1, &LedTask, 0);
+  xTaskCreatePinnedToCore(ledControl.loop, "LedTask", 10000, NULL, 1, &LedTask, 0);
 
   // initiate WiFi/WifiManager
   initiateWiFi();
