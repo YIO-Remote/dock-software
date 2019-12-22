@@ -2,6 +2,7 @@
 #define SERVICE_MDNS_H
 
 #include <ESPmDNS.h>
+#include <config.h>
 
 class MDNSService
 {
@@ -15,6 +16,7 @@ public:
 
 private:
     static MDNSService*           s_instance;
+    Config*                       m_config = Config::getInstance();
 };
 
 #endif

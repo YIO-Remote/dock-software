@@ -1,4 +1,7 @@
 #include "config.h"
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiManager.h>
 
 Config* Config::s_instance = nullptr;
 
@@ -10,6 +13,7 @@ Config::Config()
     // if no LED brightness setting, set default
     if (getLedBrightness() == 0)
     {
+        Serial.println("[CONFIG] Setting default brightness");
         setLedBrightness(m_defaultLedBrightness);
     }
 
@@ -17,7 +21,8 @@ Config::Config()
     if (getFriendlyName() == "")
     {
         // get the default friendly name
-       setFriendlyName(getHostName());
+        Serial.println("[CONFIG] Setting default friendly name");
+        setFriendlyName(getHostName());
     }
 }
 
@@ -142,4 +147,18 @@ void Config::reset()
     Serial.println("[CONFIG] nvs_flash_init: " + err);
     err = nvs_flash_erase();
     Serial.println("[CONFIG] nvs_flash_erase: " + err);
+
+    delay(500);
+
+    Serial.println(F("[CONFIG] Resetting WiFi credentials."));
+    wifi_config_t conf;
+    memset(&conf, 0, sizeof(wifi_config_t));
+    if (esp_wifi_set_config(WIFI_IF_STA, &conf))
+    {
+      log_e("[CONFIG] clear config failed!");
+    }
+
+    delay(500);
+    
+    ESP.restart();
 }

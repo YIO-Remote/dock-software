@@ -4,6 +4,7 @@
         "PLATFORMIO_CALLER": "vscode"
     },
     "files.associations": {
-        "system_error": "cpp"
+        "system_error": "cpp",
+        "functional": "cpp"
     }
 }

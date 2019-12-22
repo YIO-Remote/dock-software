@@ -1,7 +1,4 @@
 #include "service_wifi.h"
-#include <config.h>
-#include <state.h>
-#include <service_mdns.h>
 
 WifiService* WifiService::s_instance = nullptr;
 
@@ -12,11 +9,12 @@ WifiService::WifiService()
 
 void WifiService::initiateWifi()
 {
-    m_wifiManager->autoConnect(Config::getInstance()->getHostName().c_str());
-    m_ssid = Config::getInstance()->getWifiSsid();
-    m_password = Config::getInstance()->getWifiPassword();
+    m_state->currentState = State::CONNECTING;
+    m_wifiManager.autoConnect(m_config->getHostName().c_str());
+    m_ssid = m_config->getWifiSsid();
+    m_password = m_config->getWifiPassword();
     m_wifiPrevState = true;
-    State::getInstance()->currentState = State::CONNECTING;
+    m_state->currentState = State::CONN_SUCCESS;
 }
 
 void WifiService::handleReconnect()
@@ -39,11 +37,11 @@ void WifiService::handleReconnect()
     if (WiFi.status() == WL_CONNECTED && m_wifiPrevState == false)
     {
         m_wifiPrevState = true;
-        MDNSService::getInstance()->init();
+        m_mdns->init();
     }
 }
 
 void WifiService::connect(String ssid, String password)
 {
-    m_wifiManager->connectWifi(ssid, password);
+    m_wifiManager.connectWifi(ssid, password);
 }

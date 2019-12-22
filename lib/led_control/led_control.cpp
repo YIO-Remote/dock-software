@@ -1,9 +1,19 @@
 #include "led_control.h"
 #include "state.h"
 
+LedControl* LedControl::s_instance = nullptr;
+
 LedControl::LedControl()
 {
+  s_instance = this;
+  
+  xTaskCreatePinnedToCore(&LedControl::loopTask, "LedTask", 10000, this, 1, &m_ledTask, 0);
+}
 
+void LedControl::loopTask(void *pvParameter)
+{
+	LedControl* led = reinterpret_cast<LedControl*>(pvParameter);
+	led->loop();
 }
 
 void LedControl::loop()

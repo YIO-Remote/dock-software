@@ -4,6 +4,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <config.h>
+#include <state.h>
+#include <service_mdns.h>
 
 class WifiService
 {
@@ -20,10 +23,14 @@ public:
 private:
     static WifiService*           s_instance;
 
+    State*                        m_state = State::getInstance();
+    Config*                       m_config = Config::getInstance();
+    MDNSService*                  m_mdns = MDNSService::getInstance();              
+
     bool                          m_wifiPrevState = false; // previous WIFI connection state; 0 - disconnected, 1 - connected
     unsigned long                 m_wifiCheckTimedUl = 30000;
 
-    WiFiManager*                  m_wifiManager;
+    WiFiManager                   m_wifiManager;
     String                        m_ssid;
     String                        m_password;
 };
