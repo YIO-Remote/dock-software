@@ -88,6 +88,7 @@ String InfraredService::receive()
 //   bool: Successfully sent or not.
 bool InfraredService::sendPronto(const String str, uint16_t repeats)
 {
+    Serial.println("[IR] Sending pronto codes.");
     uint16_t count;
     uint16_t *code_array;
     int16_t index = -1;
