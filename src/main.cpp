@@ -183,9 +183,6 @@ void setup()
   // initialize OTA service
   otaService.init();
 
-  // initialize MDNS
-  mdnsService->init();
-
   // initialize IR service
   irService->init();
 }
