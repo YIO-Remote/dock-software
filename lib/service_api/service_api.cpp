@@ -261,7 +261,7 @@ void API::processData(String response, int id, String type)
             // Change friendly name
             if (webSocketJsonDocument["command"].as<String>() == "set_friendly_name")
             {
-                String dockFriendlyName = webSocketJsonDocument["set_friendly_name"].as<String>();
+                String dockFriendlyName = webSocketJsonDocument["friendly_name"].as<String>();
 
                 Config::getInstance()->setFriendlyName(dockFriendlyName);
 
