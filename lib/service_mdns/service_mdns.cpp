@@ -23,4 +23,5 @@ void MDNSService::init()
     MDNS.addService("yio-dock-ota", "tcp", m_config->OTA_port);
     MDNS.addService("yio-dock-api", "tcp", m_config->API_port);
     MDNS.addServiceTxt("yio-dock-api", "tcp", "dockFriendlyName", m_config->getFriendlyName());
+    Serial.println(F("[MDNS] Services added"));
 }

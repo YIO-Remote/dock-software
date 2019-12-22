@@ -154,9 +154,10 @@ void setup()
   ledControl = new LedControl();
   ledControl->setLedMaxBrightness(config->getLedBrightness());
   wifiService = new WifiService();
-  mdnsService = new MDNSService();
   irService = new InfraredService();
   api = new API();
+  mdnsService = new MDNSService();
+
 
   //Print Dock Info.
   state->printDockInfo();

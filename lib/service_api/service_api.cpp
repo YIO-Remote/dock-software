@@ -106,7 +106,7 @@ void API::processData(String response, int id, String type)
     Serial.println(type);
     Serial.println(response);
 
-    StaticJsonDocument<400> webSocketJsonDocument;
+    StaticJsonDocument<600> webSocketJsonDocument;
     DeserializationError error = deserializeJson(webSocketJsonDocument, response);
 
     if (error)
