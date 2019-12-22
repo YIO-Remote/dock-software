@@ -207,6 +207,9 @@ void loop()
   // handle IR
   irService->loop();
 
+  // handle MDNS
+  mdnsService->loop();
+
   // Time to rest
   delay(100);
 }

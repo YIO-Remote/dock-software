@@ -13,6 +13,8 @@ public:
     static MDNSService*           getInstance() { return s_instance; }
 
     void init();
+    void loop();
+    void addFriendlyName(String name);
 
 private:
     static MDNSService*           s_instance;

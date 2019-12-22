@@ -1,5 +1,6 @@
 #include "service_api.h"
 #include "service_wifi.h"
+#include "service_mdns.h"
 
 API* API::s_instance = nullptr;
 
@@ -262,10 +263,8 @@ void API::processData(String response, int id, String type)
             if (webSocketJsonDocument["command"].as<String>() == "set_friendly_name")
             {
                 String dockFriendlyName = webSocketJsonDocument["friendly_name"].as<String>();
-
                 Config::getInstance()->setFriendlyName(dockFriendlyName);
-
-                MDNS.addServiceTxt("yio-dock-api", "tcp", "dockFriendlyName", dockFriendlyName);
+                MDNSService::getInstance()->addFriendlyName(dockFriendlyName);     
             }
 
             // Erase and reset the dock
