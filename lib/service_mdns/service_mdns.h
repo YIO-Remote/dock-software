@@ -14,6 +14,7 @@ public:
 
     void init();
     void loop();
+    bool running = true;
     void addFriendlyName(String name);
 
 private:

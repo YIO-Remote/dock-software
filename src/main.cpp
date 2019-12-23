@@ -180,6 +180,9 @@ void setup()
   // initialize API service
   api->init();
 
+  // initialize MDNS service
+  mdnsService->init();
+
   // initialize OTA service
   otaService.init();
 

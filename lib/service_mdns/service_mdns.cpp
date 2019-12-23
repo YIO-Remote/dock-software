@@ -19,11 +19,11 @@ void MDNSService::init()
     }
     Serial.println(F("[MDNS] mDNS started"));
 
-    // Add mDNS service
-    MDNS.addService("_yio-dock-ota", "_tcp", m_config->OTA_port);
-    MDNS.addService("_yio-dock-api", "_tcp", m_config->API_port);
-    addFriendlyName(m_config->getFriendlyName());
-    Serial.println(F("[MDNS] Services added"));
+    // // Add mDNS service
+    // MDNS.addService("_yio-dock-ota", "_tcp", m_config->OTA_port);
+    // MDNS.addService("_yio-dock-api", "_tcp", m_config->API_port);
+    // addFriendlyName(m_config->getFriendlyName());
+    // Serial.println(F("[MDNS] Services added"));
 }
 
 void MDNSService::loop()
@@ -32,12 +32,15 @@ void MDNSService::loop()
     static unsigned long lastSampleTime = 0 - fiveMinutes;
 
     unsigned long now = millis();
-    if (now - lastSampleTime >= fiveMinutes)
+    if (now - lastSampleTime >= fiveMinutes && running)
     {
         lastSampleTime += fiveMinutes;
-        init();
+        // Add mDNS service
+        MDNS.addService("_yio-dock-ota", "_tcp", m_config->OTA_port);
+        MDNS.addService("_yio-dock-api", "_tcp", m_config->API_port);
+        addFriendlyName(m_config->getFriendlyName());
+        Serial.println(F("[MDNS] Services updated"));
     }
-
 }
 
 void MDNSService::addFriendlyName(String name)
