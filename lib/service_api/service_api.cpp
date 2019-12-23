@@ -192,7 +192,7 @@ void API::processData(String response, int id, String type)
     // COMMANDS TO THE DOCK
     for (int i = 0; i < m_webSocketClientsCount; i++)
     {
-        if (m_webSocketClients[i] != -1)
+        if (m_webSocketClients[i] == id)
         {
             // it's on the list, let's see what it wants
             if (webSocketJsonDocument.containsKey("type") && webSocketJsonDocument["type"].as<String>() == "dock")
