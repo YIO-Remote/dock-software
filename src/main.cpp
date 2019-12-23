@@ -181,7 +181,7 @@ void setup()
   api->init();
 
   // initialize MDNS service
-  mdnsService->init();
+  // mdnsService->init();
 
   // initialize OTA service
   otaService.init();

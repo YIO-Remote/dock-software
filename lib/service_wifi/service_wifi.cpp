@@ -23,8 +23,8 @@ void WifiService::handleReconnect()
     {
         Serial.println(F("[WIFI] Wifi disconnected"));
         m_wifiPrevState = false;
-        MDNS.end();
         m_mdns->running = false;
+        MDNS.end();
 
         WiFi.disconnect();
         delay(1000);
@@ -41,7 +41,7 @@ void WifiService::handleReconnect()
     {   
         Serial.println(F("[WIFI] Wifi connected"));
         m_wifiPrevState = true;
-        m_mdns->init();
+        // m_mdns->init();
         m_mdns->running = true;
     }
 }
