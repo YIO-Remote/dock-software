@@ -197,82 +197,100 @@ void API::processData(String response, int id, String type)
             // it's on the list, let's see what it wants
             if (webSocketJsonDocument.containsKey("type") && webSocketJsonDocument["type"].as<String>() == "dock")
             {
-            // Change LED brightness
-            if (webSocketJsonDocument["command"].as<String>() == "led_brightness_start")
-            {
-                State::getInstance()->currentState = State::LED_SETUP;
-                int maxbrightness = webSocketJsonDocument["brightness"].as<int>();
-                LedControl::getInstance()->setLedMaxBrightness(maxbrightness);
-
-                Serial.println(F("[API] Led brightness start"));
-                Serial.print(F("Brightness: "));
-                Serial.println(maxbrightness);
-            }
-            if (webSocketJsonDocument["command"].as<String>() == "led_brightness_stop")
-            {
-                State::getInstance()->currentState = State::NORMAL;
-                ledcWrite(LedControl::getInstance()->m_ledChannel, 0);
-
-                Serial.println(F("[API] Led brightness stop"));
-
-                // save settings
-                Config::getInstance()->setLedBrightness(LedControl::getInstance()->getLedMaxBrightness());
-            }
-
-            // Send IR code
-            if (webSocketJsonDocument["command"].as<String>() == "ir_send")
-            {
-                Serial.println(F("[API] IR Send"));
-                if (webSocketJsonDocument["format"] == "pronto")
+                // Ping pong
+                if (webSocketJsonDocument["command"].as<String>() == "ping")
                 {
-                    InfraredService::getInstance()->sendPronto(webSocketJsonDocument["code"].as<String>(), 1);
+                    Serial.println(F("[API] Sending heartbeat"));
+                    responseDoc["type"] = "dock";
+                    responseDoc["message"] = "pong";
+                    String message;
+                    serializeJson(responseDoc, message);
+                    m_webSocketServer.sendTXT(id, message);
                 }
-                else if (webSocketJsonDocument["format"] == "hex")
+
+                // Change LED brightness
+                if (webSocketJsonDocument["command"].as<String>() == "led_brightness_start")
                 {
-                    InfraredService::getInstance()->send(webSocketJsonDocument["code"].as<String>());
+                    State::getInstance()->currentState = State::LED_SETUP;
+                    int maxbrightness = webSocketJsonDocument["brightness"].as<int>();
+                    LedControl::getInstance()->setLedMaxBrightness(maxbrightness);
+
+                    Serial.println(F("[API] Led brightness start"));
+                    Serial.print(F("Brightness: "));
+                    Serial.println(maxbrightness);
                 }
-            }
+                if (webSocketJsonDocument["command"].as<String>() == "led_brightness_stop")
+                {
+                    State::getInstance()->currentState = State::NORMAL;
+                    ledcWrite(LedControl::getInstance()->m_ledChannel, 0);
 
-            // Turn on IR receiving
-            if (webSocketJsonDocument["command"].as<String>() == "ir_receive_on")
-            {
-                InfraredService::getInstance()->receiving = true;
-                Serial.println(F("[API] IR Receive on"));
-            }
+                    Serial.println(F("[API] Led brightness stop"));
 
-            // Turn off IR receiving
-            if (webSocketJsonDocument["command"].as<String>() == "ir_receive_off")
-            {
-                InfraredService::getInstance()->receiving = false;
-                Serial.println(F("[API] IR Receive off"));
-            }
+                    // save settings
+                    Config::getInstance()->setLedBrightness(LedControl::getInstance()->getLedMaxBrightness());
+                }
 
-            // Change state to indicate remote is fully charged
-            if (webSocketJsonDocument["command"].as<String>() == "remote_charged")
-            {
-                State::getInstance()->currentState = State::NORMAL_FULLYCHARGED;
-            }
+                // Send IR code
+                if (webSocketJsonDocument["command"].as<String>() == "ir_send")
+                {
+                    Serial.println(F("[API] IR Send"));
+                    if (webSocketJsonDocument["format"] == "pronto")
+                    {
+                        InfraredService::getInstance()->sendPronto(webSocketJsonDocument["code"].as<String>(), 1);
+                    }
+                    else if (webSocketJsonDocument["format"] == "hex")
+                    {
+                        InfraredService::getInstance()->send(webSocketJsonDocument["code"].as<String>());
+                    }
+                }
 
-            // Change state to indicate remote is low battery
-            if (webSocketJsonDocument["command"].as<String>() == "remote_lowbattery")
-            {
-                State::getInstance()->currentState = State::NORMAL_LOWBATTERY;
-            }
+                // Turn on IR receiving
+                if (webSocketJsonDocument["command"].as<String>() == "ir_receive_on")
+                {
+                    InfraredService::getInstance()->receiving = true;
+                    Serial.println(F("[API] IR Receive on"));
+                }
 
-            // Change friendly name
-            if (webSocketJsonDocument["command"].as<String>() == "set_friendly_name")
-            {
-                String dockFriendlyName = webSocketJsonDocument["friendly_name"].as<String>();
-                Config::getInstance()->setFriendlyName(dockFriendlyName);
-                MDNSService::getInstance()->addFriendlyName(dockFriendlyName);     
-            }
+                // Turn off IR receiving
+                if (webSocketJsonDocument["command"].as<String>() == "ir_receive_off")
+                {
+                    InfraredService::getInstance()->receiving = false;
+                    Serial.println(F("[API] IR Receive off"));
+                }
 
-            // Erase and reset the dock
-            if (webSocketJsonDocument["command"].as<String>() == "reset")
-            {
-                Serial.println(F("[API] Reset"));
-                Config::getInstance()->reset();
-            }
+                // Change state to indicate remote is fully charged
+                if (webSocketJsonDocument["command"].as<String>() == "remote_charged")
+                {
+                    State::getInstance()->currentState = State::NORMAL_FULLYCHARGED;
+                }
+
+                // Change state to indicate remote is low battery
+                if (webSocketJsonDocument["command"].as<String>() == "remote_lowbattery")
+                {
+                    State::getInstance()->currentState = State::NORMAL_LOWBATTERY;
+                }
+
+                // Change friendly name
+                if (webSocketJsonDocument["command"].as<String>() == "set_friendly_name")
+                {
+                    String dockFriendlyName = webSocketJsonDocument["friendly_name"].as<String>();
+                    Config::getInstance()->setFriendlyName(dockFriendlyName);
+                    MDNSService::getInstance()->addFriendlyName(dockFriendlyName);     
+                }
+
+                // Reboot the dock
+                if (webSocketJsonDocument["command"].as<String>() == "reboot")
+                {
+                    Serial.println(F("[API] Rebooting"));
+                    State::getInstance()->reboot();
+                }
+
+                // Erase and reset the dock
+                if (webSocketJsonDocument["command"].as<String>() == "reset")
+                {
+                    Serial.println(F("[API] Reset"));
+                    Config::getInstance()->reset();
+                }
             }
         }
     }
