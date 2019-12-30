@@ -233,14 +233,28 @@ void API::processData(String response, int id, String type)
                 // Send IR code
                 if (webSocketJsonDocument["command"].as<String>() == "ir_send")
                 {
+                    responseDoc["type"] = "dock";
+                    responseDoc["message"] = "ir_send";
+
                     Serial.println(F("[API] IR Send"));
                     if (webSocketJsonDocument["format"] == "pronto")
                     {
-                        InfraredService::getInstance()->sendPronto(webSocketJsonDocument["code"].as<String>(), 1);
+                        bool result = InfraredService::getInstance()->sendPronto(webSocketJsonDocument["code"].as<String>(), 1);
+                        responseDoc["success"] = result;
                     }
                     else if (webSocketJsonDocument["format"] == "hex")
                     {
-                        InfraredService::getInstance()->send(webSocketJsonDocument["code"].as<String>());
+                        bool result = InfraredService::getInstance()->send(webSocketJsonDocument["code"].as<String>());
+                        responseDoc["success"] = result;
+                    }
+                    
+                    String message;
+                    serializeJson(responseDoc, message);
+                    if (type == "websocket")
+                    {
+                        m_webSocketServer.sendTXT(id, message);
+                    } else {
+                        Serial.println(message); 
                     }
                 }
 
