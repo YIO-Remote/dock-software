@@ -19,10 +19,14 @@ public:
     explicit State();
     virtual ~State(){}
 
-    static State*           getInstance()
-    { return s_instance; }
+    static State*           getInstance() { return s_instance; }
 
+	// current state
     States                  currentState = SETUP;
+
+	// reboots the ESP
+	void 					reboot();
+	void					printDockInfo(); 
 
 private:
     static State*           s_instance;

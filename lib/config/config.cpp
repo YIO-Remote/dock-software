@@ -1,11 +1,19 @@
 #include "config.h"
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiManager.h>
+
+Config* Config::s_instance = nullptr;
 
 // initializing config
 Config::Config()
 {
+    s_instance = this;
+
     // if no LED brightness setting, set default
     if (getLedBrightness() == 0)
     {
+        Serial.println("[CONFIG] Setting default brightness");
         setLedBrightness(m_defaultLedBrightness);
     }
 
@@ -13,11 +21,8 @@ Config::Config()
     if (getFriendlyName() == "")
     {
         // get the default friendly name
-        char dockHostName[] = "YIO-Dock-xxxxxxxxxxxx";
-        uint8_t baseMac[6];
-        esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
-        sprintf(dockHostName, "YIO-Dock-%02X%02X%02X%02X%02X%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
-        setFriendlyName(dockHostName);
+        Serial.println("[CONFIG] Setting default friendly name");
+        setFriendlyName(getHostName());
     }
 }
 
@@ -112,7 +117,17 @@ void Config::setWifiPassword(String value)
     m_preferences.end();
 }
 
-// reset
+// get hostname
+String Config::getHostName()
+{
+    char dockHostName[] = "YIO-Dock-xxxxxxxxxxxx";
+    uint8_t baseMac[6];
+    esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
+    sprintf(dockHostName, "YIO-Dock-%02X%02X%02X%02X%02X%02X", baseMac[0], baseMac[1], baseMac[2], baseMac[3], baseMac[4], baseMac[5]);
+    return dockHostName;    
+}
+
+// reset config to defaults
 void Config::reset()
 {
     Serial.println("[CONFIG] Resetting configuration.");
@@ -132,4 +147,18 @@ void Config::reset()
     Serial.println("[CONFIG] nvs_flash_init: " + err);
     err = nvs_flash_erase();
     Serial.println("[CONFIG] nvs_flash_erase: " + err);
+
+    delay(500);
+
+    Serial.println(F("[CONFIG] Resetting WiFi credentials."));
+    wifi_config_t conf;
+    memset(&conf, 0, sizeof(wifi_config_t));
+    if (esp_wifi_set_config(WIFI_IF_STA, &conf))
+    {
+      log_e("[CONFIG] clear config failed!");
+    }
+
+    delay(500);
+    
+    ESP.restart();
 }
