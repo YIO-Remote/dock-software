@@ -70,7 +70,7 @@ void LedControl::loop()
       delay(300);
     }
     // successful connection
-    else if (State::getInstance()->currentState == State::CONNECTING)
+    else if (State::getInstance()->currentState == State::CONN_SUCCESS)
     {
       // Blink the LED 3 times to indicate successful connection
       for (int i = 0; i < 4; i++)

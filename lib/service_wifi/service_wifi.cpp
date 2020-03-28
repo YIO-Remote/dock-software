@@ -21,13 +21,20 @@ void WifiService::handleReconnect()
 {
     if (WiFi.status() != WL_CONNECTED && (millis() > m_wifiCheckTimedUl))
     {
+        m_wifiReconnectCount++;
+
+        if (m_wifiReconnectCount == 5) {
+            m_state->reboot();
+        }
+
         Serial.println(F("[WIFI] Wifi disconnected"));
         m_wifiPrevState = false;
         m_mdns->running = false;
         MDNS.end();
 
         WiFi.disconnect();
-        delay(1000);
+        delay(2000);
+        m_state->currentState = State::CONNECTING;
         Serial.println(F("[WIFI] Reconnecting"));
         WiFi.enableSTA(true);
         WiFi.mode(WIFI_STA);
@@ -39,10 +46,12 @@ void WifiService::handleReconnect()
     // restart MDNS if wifi is connected again
     if (WiFi.status() == WL_CONNECTED && m_wifiPrevState == false)
     {   
+        m_wifiReconnectCount = 0;
         Serial.println(F("[WIFI] Wifi connected"));
         m_wifiPrevState = true;
         // m_mdns->init();
         m_mdns->running = true;
+        m_state->currentState = State::CONN_SUCCESS;
     }
 }
 

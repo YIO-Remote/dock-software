@@ -198,9 +198,6 @@ void loop()
   // Handle wifi disconnects.
   wifiService->handleReconnect();
 
-  // Handle OTA updates.
-  otaService.handle();
-
   // Handle api calls
   api->loop();
 
@@ -210,6 +207,9 @@ void loop()
   // handle MDNS
   mdnsService->loop();
 
+  // Handle OTA updates.
+  otaService.handle();
+  
   // Time to rest
   delay(100);
 }

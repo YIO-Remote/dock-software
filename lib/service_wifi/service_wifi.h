@@ -29,6 +29,7 @@ private:
 
     bool                          m_wifiPrevState = false; // previous WIFI connection state; 0 - disconnected, 1 - connected
     unsigned long                 m_wifiCheckTimedUl = 30000;
+    int                           m_wifiReconnectCount = 0;
 
     WiFiManager                   m_wifiManager;
     String                        m_ssid;
