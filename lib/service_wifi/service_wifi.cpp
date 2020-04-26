@@ -24,6 +24,7 @@ void WifiService::handleReconnect()
         m_wifiReconnectCount++;
 
         if (m_wifiReconnectCount == 5) {
+            m_wifiReconnectCount = 0;
             m_state->reboot();
         }
 
