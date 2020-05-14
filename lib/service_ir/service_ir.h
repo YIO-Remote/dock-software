@@ -41,6 +41,8 @@ private:
     const uint16_t              kMinUnknownSize = 12;
     String resultToHexidecimal(const decode_results * const result);
     uint64_t getUInt64fromHex(char const *str);
+    uint16_t * newCodeArray(const uint16_t size);
+    uint16_t countValuesInStr(const String str, char sep);
 
     IRsend                      irsend = IRsend(kIrLedPin);
     IRrecv                      irrecv = IRrecv(kRecvPin, kCaptureBufferSize, kTimeout, true);

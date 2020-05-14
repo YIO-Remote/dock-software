@@ -101,10 +101,10 @@ void API::handleSerial()
     }
 }
 
-void API::processData(String response, int id, String type)
+void API::processData(String response, int id, String source)
 {
     Serial.print("[API] GOT DATA FROM: ");
-    Serial.println(type);
+    Serial.println(source);
     Serial.println(response);
 
     StaticJsonDocument<600> webSocketJsonDocument;
@@ -160,7 +160,7 @@ void API::processData(String response, int id, String type)
                 String message;
                 serializeJson(responseDoc, message);
 
-                if (type == "websocket")
+                if (source == "websocket")
                 {
                     m_webSocketServer.sendTXT(id, message);
 
@@ -178,7 +178,7 @@ void API::processData(String response, int id, String type)
                 responseDoc["message"] = "Invalid token";
                 String message;
                 serializeJson(responseDoc, message);
-                if (type == "websocket")
+                if (source == "websocket")
                 {
                     m_webSocketServer.sendTXT(id, message);
                 } else {
@@ -193,7 +193,7 @@ void API::processData(String response, int id, String type)
             responseDoc["message"] = "Token needed";
             String message;
             serializeJson(responseDoc, message);
-            if (type == "websocket")
+            if (source == "websocket")
             {
                 m_webSocketServer.sendTXT(id, message);
             } else {
@@ -252,12 +252,12 @@ void API::processData(String response, int id, String type)
                     Serial.println(F("[API] IR Send"));
                     String code = webSocketJsonDocument["code"].as<String>();
                     String format = webSocketJsonDocument["format"].as<String>();
-                    bool result = InfraredService::getInstance()->send(code, webSocketJsonDocument["format"]);
+                    bool result = InfraredService::getInstance()->send(code, format);
                     responseDoc["success"] = result;
                     
                     String message;
                     serializeJson(responseDoc, message);
-                    if (type == "websocket")
+                    if (source == "websocket")
                     {
                         m_webSocketServer.sendTXT(id, message);
                     } else {
