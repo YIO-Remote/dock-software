@@ -81,7 +81,7 @@ bool InfraredService::send(const String message, const String format)
     } else {
         int16_t index = -1;
         uint16_t start_from = 0;
-        uint16_t count = countValuesInStr(commandStr, ';');
+        uint16_t count = countValuesInStr(commandStr, ',');
         uint16_t *code_array = newCodeArray(count);
 
         count = 0;
