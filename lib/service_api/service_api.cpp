@@ -120,23 +120,36 @@ void API::processData(String response, int id, String type)
     // response json
     StaticJsonDocument<200> responseDoc;
 
+    String type;
+    if (webSocketJsonDocument.containsKey("type")) {
+        type = webSocketJsonDocument["type"].as<String>();
+    }
+
+    String command;
+    if (webSocketJsonDocument.containsKey("command")) {
+        command = webSocketJsonDocument["command"].as<String>();
+    }
+
     // NEW WIFI SETTINGS
     if (webSocketJsonDocument.containsKey("ssid") && webSocketJsonDocument.containsKey("password"))
     {
-        Config::getInstance()->setWifiSsid(webSocketJsonDocument["ssid"].as<String>());
-        Config::getInstance()->setWifiPassword(webSocketJsonDocument["password"].as<String>());
+        String ssid = webSocketJsonDocument["ssid"].as<String>();
+        String pass = webSocketJsonDocument["password"].as<String>();
 
-        Serial.println("[API] Saving SSID:" + Config::getInstance()->getWifiSsid() + " PASS:" + Config::getInstance()->getWifiPassword());
+        Config::getInstance()->setWifiSsid(ssid);
+        Config::getInstance()->setWifiPassword(pass);
+
+        Serial.println("[API] Saving SSID:" + ssid + " PASS:" + pass);
 
         Serial.println(F("[API] Disconnecting any current WiFi connections."));
         WiFi.disconnect();
         delay(1000);
         Serial.println(F("[API] Connecting to provided WiFi credentials."));
-        WifiService::getInstance()->connect(Config::getInstance()->getWifiSsid(), Config::getInstance()->getWifiPassword());
+        WifiService::getInstance()->connect(ssid, pass);
     }
     
     // AUTHENTICATION TO THE API
-    if (webSocketJsonDocument.containsKey("type") && webSocketJsonDocument["type"].as<String>() == "auth")
+    if (type == "auth")
     {
         if (webSocketJsonDocument.containsKey("token"))
         {
@@ -195,10 +208,10 @@ void API::processData(String response, int id, String type)
         if (m_webSocketClients[i] == id)
         {
             // it's on the list, let's see what it wants
-            if (webSocketJsonDocument.containsKey("type") && webSocketJsonDocument["type"].as<String>() == "dock")
+            if (type == "dock")
             {
                 // Ping pong
-                if (webSocketJsonDocument["command"].as<String>() == "ping")
+                if (command == "ping")
                 {
                     Serial.println(F("[API] Sending heartbeat"));
                     responseDoc["type"] = "dock";
@@ -209,7 +222,7 @@ void API::processData(String response, int id, String type)
                 }
 
                 // Change LED brightness
-                if (webSocketJsonDocument["command"].as<String>() == "led_brightness_start")
+                if (command == "led_brightness_start")
                 {
                     State::getInstance()->currentState = State::LED_SETUP;
                     int maxbrightness = webSocketJsonDocument["brightness"].as<int>();
@@ -219,7 +232,7 @@ void API::processData(String response, int id, String type)
                     Serial.print(F("Brightness: "));
                     Serial.println(maxbrightness);
                 }
-                if (webSocketJsonDocument["command"].as<String>() == "led_brightness_stop")
+                if (command == "led_brightness_stop")
                 {
                     State::getInstance()->currentState = State::NORMAL;
                     ledcWrite(LedControl::getInstance()->m_ledChannel, 0);
@@ -231,7 +244,7 @@ void API::processData(String response, int id, String type)
                 }
 
                 // Send IR code
-                if (webSocketJsonDocument["command"].as<String>() == "ir_send")
+                if (command == "ir_send")
                 {
                     responseDoc["type"] = "dock";
                     responseDoc["message"] = "ir_send";
@@ -263,33 +276,33 @@ void API::processData(String response, int id, String type)
                 }
 
                 // Turn on IR receiving
-                if (webSocketJsonDocument["command"].as<String>() == "ir_receive_on")
+                if (command == "ir_receive_on")
                 {
                     InfraredService::getInstance()->receiving = true;
                     Serial.println(F("[API] IR Receive on"));
                 }
 
                 // Turn off IR receiving
-                if (webSocketJsonDocument["command"].as<String>() == "ir_receive_off")
+                if (command == "ir_receive_off")
                 {
                     InfraredService::getInstance()->receiving = false;
                     Serial.println(F("[API] IR Receive off"));
                 }
 
                 // Change state to indicate remote is fully charged
-                if (webSocketJsonDocument["command"].as<String>() == "remote_charged")
+                if (command == "remote_charged")
                 {
                     State::getInstance()->currentState = State::NORMAL_FULLYCHARGED;
                 }
 
                 // Change state to indicate remote is low battery
-                if (webSocketJsonDocument["command"].as<String>() == "remote_lowbattery")
+                if (command == "remote_lowbattery")
                 {
                     State::getInstance()->currentState = State::NORMAL_LOWBATTERY;
                 }
 
                 // Change friendly name
-                if (webSocketJsonDocument["command"].as<String>() == "set_friendly_name")
+                if (command == "set_friendly_name")
                 {
                     String dockFriendlyName = webSocketJsonDocument["friendly_name"].as<String>();
                     Config::getInstance()->setFriendlyName(dockFriendlyName);
@@ -297,14 +310,14 @@ void API::processData(String response, int id, String type)
                 }
 
                 // Reboot the dock
-                if (webSocketJsonDocument["command"].as<String>() == "reboot")
+                if (command == "reboot")
                 {
                     Serial.println(F("[API] Rebooting"));
                     State::getInstance()->reboot();
                 }
 
                 // Erase and reset the dock
-                if (webSocketJsonDocument["command"].as<String>() == "reset")
+                if (command == "reset")
                 {
                     Serial.println(F("[API] Reset"));
                     Config::getInstance()->reset();
