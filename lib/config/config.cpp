@@ -132,16 +132,19 @@ void Config::reset()
 {
     Serial.println("[CONFIG] Resetting configuration.");
 
+    Serial.println("[CONFIG] Resetting general.");
     m_preferences.begin("general", false);
     m_preferences.clear();
     m_preferences.end();
 
     delay(500);
 
+    Serial.println("[CONFIG] Resetting wifi.");
     m_preferences.begin("wifi", false);
     m_preferences.clear();
     m_preferences.end();
 
+    Serial.println("[CONFIG] Erasing flash.");
     int err;
     err = nvs_flash_init();
     Serial.println("[CONFIG] nvs_flash_init: " + err);
