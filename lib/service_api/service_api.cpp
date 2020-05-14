@@ -13,8 +13,8 @@ void API::init()
 {
     // initialize the websocket server
     m_webSocketServer.begin();
-    m_webSocketServer.onEvent([=](uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
-        switch (type)
+    m_webSocketServer.onEvent([=](uint8_t num, WStype_t commandType, uint8_t *payload, size_t length) {
+        switch (commandType)
         {
         case WStype_DISCONNECTED:
         {
@@ -37,7 +37,7 @@ void API::init()
 
             // send auth request message
             StaticJsonDocument<200> responseDoc;
-            responseDoc["type"] = "auth_required";
+            responseDoc["commandType"] = "auth_required";
             String message;
             serializeJson(responseDoc, message);
             m_webSocketServer.sendTXT(num, message);
@@ -120,9 +120,9 @@ void API::processData(String response, int id, String type)
     // response json
     StaticJsonDocument<200> responseDoc;
 
-    String type;
-    if (webSocketJsonDocument.containsKey("type")) {
-        type = webSocketJsonDocument["type"].as<String>();
+    String commandType;
+    if (webSocketJsonDocument.containsKey("commandType")) {
+        commandType = webSocketJsonDocument["commandType"].as<String>();
     }
 
     String command;
@@ -149,18 +149,18 @@ void API::processData(String response, int id, String type)
     }
     
     // AUTHENTICATION TO THE API
-    if (type == "auth")
+    if (commandType == "auth")
     {
         if (webSocketJsonDocument.containsKey("token"))
         {
             if (webSocketJsonDocument["token"].as<String>() == Config::getInstance()->token)
             {
                 // token ok
-                responseDoc["type"] = "auth_ok";
+                responseDoc["commandType"] = "auth_ok";
                 String message;
                 serializeJson(responseDoc, message);
 
-                if (type == "websocket")
+                if (commandType == "websocket")
                 {
                     m_webSocketServer.sendTXT(id, message);
 
@@ -174,11 +174,11 @@ void API::processData(String response, int id, String type)
             else
             {
                 // invalid token
-                responseDoc["type"] = "auth";
+                responseDoc["commandType"] = "auth";
                 responseDoc["message"] = "Invalid token";
                 String message;
                 serializeJson(responseDoc, message);
-                if (type == "websocket")
+                if (commandType == "websocket")
                 {
                     m_webSocketServer.sendTXT(id, message);
                 } else {
@@ -189,11 +189,11 @@ void API::processData(String response, int id, String type)
         else
         {
             // token needed
-            responseDoc["type"] = "auth";
+            responseDoc["commandType"] = "auth";
             responseDoc["message"] = "Token needed";
             String message;
             serializeJson(responseDoc, message);
-            if (type == "websocket")
+            if (commandType == "websocket")
             {
                 m_webSocketServer.sendTXT(id, message);
             } else {
@@ -208,13 +208,13 @@ void API::processData(String response, int id, String type)
         if (m_webSocketClients[i] == id)
         {
             // it's on the list, let's see what it wants
-            if (type == "dock")
+            if (commandType == "dock")
             {
                 // Ping pong
                 if (command == "ping")
                 {
                     Serial.println(F("[API] Sending heartbeat"));
-                    responseDoc["type"] = "dock";
+                    responseDoc["commandType"] = "dock";
                     responseDoc["message"] = "pong";
                     String message;
                     serializeJson(responseDoc, message);
@@ -246,7 +246,7 @@ void API::processData(String response, int id, String type)
                 // Send IR code
                 if (command == "ir_send")
                 {
-                    responseDoc["type"] = "dock";
+                    responseDoc["commandType"] = "dock";
                     responseDoc["message"] = "ir_send";
 
                     Serial.println(F("[API] IR Send"));
@@ -257,7 +257,7 @@ void API::processData(String response, int id, String type)
                     
                     String message;
                     serializeJson(responseDoc, message);
-                    if (type == "websocket")
+                    if (commandType == "websocket")
                     {
                         m_webSocketServer.sendTXT(id, message);
                     } else {
