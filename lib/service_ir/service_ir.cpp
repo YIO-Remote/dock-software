@@ -49,68 +49,33 @@ String InfraredService::receive()
     String code = "";
 
     if (irrecv.decode(&results)) {
-        Serial.println(results.decode_type);
-        Serial.println(results.address);
-        Serial.println(results.bits);
-        Serial.println(results.repeat);
-        Serial.println(*resultToRawArray(&results));
         Serial.println(resultToHumanReadableBasic(&results));
-        code = resultToHexidecimal(&results);
+        code += results.decode_type;
+        code += ",";
+        code += resultToHexidecimal(&results);
+        code += ",";
+        code += results.bits;
+        code += ",";
+        code += results.repeat;
         Serial.println(code);
-        int foo = getUInt64fromHex(code.c_str());
-        Serial.println(foo);
-        // uint16_t *raw = resultToRawArray(&results);
-        // Serial.println(*raw);
         yield();
     }
     return code;
 }
 
-bool InfraredService::sendPronto(const String str, uint16_t repeats)
+bool InfraredService::send(const String message, const String format)
 {
-    Serial.println("[IR] Sending pronto codes.");
-    return false;
-}
+    // Format is: "<protocol>,<hex-ir-code>,<bits>,<repeat-count>" e.g. "4,0x640C,15,0"
+    const int firstIndex = message.indexOf(',');
+    const int secondIndex =  message.indexOf(',', firstIndex + 1);
+    const int thirdIndex = message.indexOf(',', secondIndex + 1);
 
-bool InfraredService::send(const int decodeTypeInt, const String codeHex, const uint16_t bits, const uint16_t repeatCount)
-{
-    // Serial.println("[IR] Sending raw codes.");
-    // decode_type_t decodeType = static_cast<decode_type_t>(decodeTypeInt);
-    // Serial.println(codeHex);
-    // uint64_t code = getUInt64fromHex(codeHex.c_str());
-    // Serial.println((int)code);
-    // return irsend.send(SONY, 0x240C OR 9228, 15, 5);
+    decode_type_t protocol = static_cast<decode_type_t>(message.substring(0, firstIndex).toInt());
+    uint64_t command = getUInt64fromHex(message.substring(firstIndex + 1, secondIndex).c_str());
+    uint16_t bits = message.substring(secondIndex + 1, thirdIndex).toInt();
+    uint16_t repeatCount = message.substring(thirdIndex + 1).toInt();
 
-    // "4,0x640C,15,0"
-    if (codeHex.indexOf(',') > 0) {
-        const int firstIndex = codeHex.indexOf(',');
-        const int secondIndex =  codeHex.indexOf(',', firstIndex + 1);
-        const int thirdIndex = codeHex.indexOf(',', secondIndex + 1);
-
-        decode_type_t dt = static_cast<decode_type_t>(codeHex.substring(0, firstIndex).toInt());
-        uint64_t c = getUInt64fromHex(codeHex.substring(firstIndex + 1, secondIndex).c_str());
-        uint16_t b = codeHex.substring(secondIndex + 1, thirdIndex).toInt();
-        uint16_t r = codeHex.substring(thirdIndex + 1).toInt();
-
-        Serial.println(dt);
-        Serial.println((int)c);
-        Serial.println(b);
-        Serial.println(r);
-
-        return irsend.send(dt, c, b, r);
-    } else {
-        decode_type_t decodeType = static_cast<decode_type_t>(decodeTypeInt);
-        uint64_t code = getUInt64fromHex(codeHex.c_str());
-
-        Serial.println(decodeType);
-        Serial.println((int)code);
-        Serial.println(bits);
-        Serial.println(repeatCount);
-
-        return irsend.send(decodeType, code, bits, repeatCount);
-    }
-
-    // return irsend.send(decodeType, code, bits, repeatCount);
+    return irsend.send(protocol, command, bits, repeatCount);
 }
 
 String InfraredService::resultToHexidecimal(const decode_results * const result) {

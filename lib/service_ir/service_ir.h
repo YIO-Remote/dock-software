@@ -23,8 +23,7 @@ public:
 
     String                      receive();
 
-    bool                        sendPronto(const String str, uint16_t repeats); // pronto
-    bool                        send(const int decodeTypeInt, const String codeHex, const uint16_t bits, const uint16_t repeatCount);
+    bool                        send(const String message, const String format);
 
     decode_results              results;
     bool                        receiving = false;

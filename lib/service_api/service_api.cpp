@@ -237,20 +237,10 @@ void API::processData(String response, int id, String type)
                     responseDoc["message"] = "ir_send";
 
                     Serial.println(F("[API] IR Send"));
-                    if (webSocketJsonDocument["format"] == "pronto")
-                    {
-                        bool result = InfraredService::getInstance()->sendPronto(webSocketJsonDocument["code"].as<String>(), 1);
-                        responseDoc["success"] = result;
-                    }
-                    else if (webSocketJsonDocument["format"] == "hex")
-                    {
-                        String code = webSocketJsonDocument["code"].as<String>();
-                        uint16_t decodeType = webSocketJsonDocument["decodeType"].as<uint16_t>();
-                        uint16_t bits = webSocketJsonDocument["bits"].as<uint16_t>();
-                        uint16_t repeatCount = webSocketJsonDocument["repeat"].as<uint16_t>();
-                        bool result = InfraredService::getInstance()->send(decodeType, code, bits, repeatCount);
-                        responseDoc["success"] = result;
-                    }
+                    String code = webSocketJsonDocument["code"].as<String>();
+                    String format = webSocketJsonDocument["format"].as<String>();
+                    bool result = InfraredService::getInstance()->send(code, webSocketJsonDocument["format"]);
+                    responseDoc["success"] = result;
                     
                     String message;
                     serializeJson(responseDoc, message);
