@@ -209,7 +209,4 @@ void loop()
 
   // Handle OTA updates.
   otaService.handle();
-  
-  // Time to rest
-  delay(100);
 }

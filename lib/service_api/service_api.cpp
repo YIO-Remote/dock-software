@@ -244,7 +244,11 @@ void API::processData(String response, int id, String type)
                     }
                     else if (webSocketJsonDocument["format"] == "hex")
                     {
-                        bool result = InfraredService::getInstance()->send(webSocketJsonDocument["code"].as<String>());
+                        String code = webSocketJsonDocument["code"].as<String>();
+                        uint16_t decodeType = webSocketJsonDocument["decodeType"].as<uint16_t>();
+                        uint16_t bits = webSocketJsonDocument["bits"].as<uint16_t>();
+                        uint16_t repeatCount = webSocketJsonDocument["repeat"].as<uint16_t>();
+                        bool result = InfraredService::getInstance()->send(decodeType, code, bits, repeatCount);
                         responseDoc["success"] = result;
                     }
                     
