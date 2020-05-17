@@ -9,6 +9,8 @@ WifiService::WifiService()
 
 void WifiService::initiateWifi()
 {
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    WiFi.setHostname(m_config->getHostName().c_str());
     m_state->currentState = State::CONNECTING;
     m_wifiManager.autoConnect(m_config->getHostName().c_str());
     m_ssid = m_config->getWifiSsid();
