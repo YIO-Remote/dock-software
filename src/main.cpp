@@ -1,11 +1,11 @@
 #include <Arduino.h>
-#include "BluetoothSerial.h"
 #include <config.h>
 #include <led_control.h>
 #include <state.h>
 #include <service_ota.h>
 #include <service_ir.h>
 #include <service_wifi.h>
+#include <service_blueooth.h>
 #include <service_mdns.h>
 #include <service_api.h>
 
@@ -19,59 +19,13 @@ Config* config;
 LedControl* ledControl;
 State* state;
 WifiService* wifiService;
+BluetoothService* bluetoothService;
 MDNSService* mdnsService;
 OTA otaService;
 API* api;
 InfraredService* irService;
-BluetoothSerial bluetoothService;
 
-TaskHandle_t BTSettingsTask; // task for handling BluetoothTasks
-
-////////////////////////////////////////////////////////////////
-// THREADED FUNCTIONS
-////////////////////////////////////////////////////////////////
-void BTSettingsHandleTask(void *pvParameters)
-{
-  // Wait two seconds before actually enabling bluetooth.
-  // In normal operation the function is closed within a couple of miliseconds. and there's no need to initialize anything.
-  delay(2000);
-
-  String receivedBtData = "";
-  bool interestingData = false; // Data between { and } chars.
-
-  //Initiate Bluetooth
-  if (bluetoothService.begin(config->getHostName()))
-  {
-    Serial.println(F("Bluetooth configurator started."));
-  }
-
-  for (;;) //Endless loop
-  {
-    char incomingChar = bluetoothService.read();
-    int charAsciiNumber = incomingChar + 0;
-    if (charAsciiNumber != 255) //ASCII 255 is continually send
-    {
-      bluetoothService.print(incomingChar); //Echo send characters.
-    }
-
-    if (String(incomingChar) == "{")
-    {
-      interestingData = true;
-      receivedBtData = "";
-    }
-    else if (String(incomingChar) == "}")
-    {
-      interestingData = false;
-      receivedBtData += "}";
-      api->processData(receivedBtData, 0, "bluetooth");
-    }
-    if (interestingData)
-    {
-      receivedBtData += String(incomingChar);
-    }
-    delay(10);
-  }
-}
+bool resetMarker = false;
 
 ////////////////////////////////////////////////////////////////
 // INTERRUPT SETUPS
@@ -128,9 +82,9 @@ void handleButtonPress()
     Serial.println(F(" mili seconds."));
     buttonTimerSet = TIMER_RESET_TIME;
 
-    if (elapsedTimeInMiliSeconds > 5000 && elapsedTimeInMiliSeconds < 20000) // between 5 and 20 seconds.
+    if (elapsedTimeInMiliSeconds > 3000 && elapsedTimeInMiliSeconds < 10000) // between 5 and 20 seconds.
     {
-      config->reset();
+      resetMarker = true;
     }
   }
 }
@@ -154,40 +108,38 @@ void setup()
   ledControl = new LedControl();
   ledControl->setLedMaxBrightness(config->getLedBrightness());
   wifiService = new WifiService();
+  bluetoothService = new BluetoothService();
   irService = new InfraredService();
   api = new API();
   mdnsService = new MDNSService();
 
+  if (config->getWifiSsid() != "") {
+    state->currentState = State::CONNECTING;
+    Serial.println(F("[MAIN] SSID found, connecting..."));
+  }
 
-  //Print Dock Info.
-  state->printDockInfo();
+  // initialize Bluetooth
+  if (state->currentState == State::SETUP) {
+    bluetoothService->init();
+  } else {
+    // CHARGING PIN setup
+    setupChargingPin();
 
-  // Run bluetooth serial config thread
-  xTaskCreatePinnedToCore(BTSettingsHandleTask, "BTSettingsTask", 10000, NULL, 1, &BTSettingsTask, 0);
+    // BUTTON PIN setup
+    setupButtonPin();
 
-  // initiate WiFi/WifiManager
-  wifiService->initiateWifi();
+    // initiate WiFi
+    wifiService->initiateWifi();
 
-  //Killing Bluetooth task when connected.
-  vTaskDelete(BTSettingsTask);
+    // initialize API service
+    api->init();
 
-  // CHARGING PIN setup
-  setupChargingPin();
+    // initialize OTA service
+    otaService.init();
 
-  // BUTTON PIN setup
-  setupButtonPin();
-
-  // initialize API service
-  api->init();
-
-  // initialize MDNS service
-  // mdnsService->init();
-
-  // initialize OTA service
-  otaService.init();
-
-  // initialize IR service
-  irService->init();
+    // initialize IR service
+    irService->init();
+  }
 }
 
 ////////////////////////////////////////////////////////////////
@@ -195,18 +147,28 @@ void setup()
 ////////////////////////////////////////////////////////////////
 void loop()
 {
-  // Handle wifi disconnects.
-  wifiService->handleReconnect();
+  if (state->currentState == State::SETUP) {
+    // Handle incoming bluetooth serial data
+    bluetoothService->handle();
+  } else {
+    // Handle wifi disconnects.
+    wifiService->handleReconnect();
 
-  // Handle api calls
-  api->loop();
+    // Handle api calls
+    api->loop();
 
-  // handle IR
-  irService->loop();
+    // handle IR
+    irService->loop();
 
-  // handle MDNS
-  mdnsService->loop();
+    // handle MDNS
+    mdnsService->loop();
 
-  // Handle OTA updates.
-  otaService.handle();
+    // Handle OTA updates.
+    otaService.handle();
+
+    // reset if marker is set
+    if (resetMarker) {
+      config->reset();
+    }
+  }
 }

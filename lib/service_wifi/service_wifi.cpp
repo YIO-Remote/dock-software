@@ -9,14 +9,8 @@ WifiService::WifiService()
 
 void WifiService::initiateWifi()
 {
-    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-    WiFi.setHostname(m_config->getHostName().c_str());
-    m_state->currentState = State::CONNECTING;
-    m_wifiManager.autoConnect(m_config->getHostName().c_str());
-    m_ssid = m_config->getWifiSsid();
-    m_password = m_config->getWifiPassword();
-    m_wifiPrevState = true;
-    m_state->currentState = State::CONN_SUCCESS;
+    Serial.println(F("[WIFI] Initializing..."));
+    connect(m_config->getWifiSsid(), m_config->getWifiPassword());
 }
 
 void WifiService::handleReconnect()
@@ -32,17 +26,12 @@ void WifiService::handleReconnect()
 
         Serial.println(F("[WIFI] Wifi disconnected"));
         m_wifiPrevState = false;
-        m_mdns->running = false;
-        MDNS.end();
-
-        WiFi.disconnect();
+        disconnect();
         delay(2000);
         m_state->currentState = State::CONNECTING;
         Serial.println(F("[WIFI] Reconnecting"));
-        WiFi.enableSTA(true);
-        WiFi.mode(WIFI_STA);
-        WiFi.setSleep(false);
-        WiFi.begin(m_ssid.c_str(), m_password.c_str());
+        connect(m_config->getWifiSsid(), m_config->getWifiPassword());
+        
         m_wifiCheckTimedUl = millis() + 30000;
     }
 
@@ -52,13 +41,23 @@ void WifiService::handleReconnect()
         m_wifiReconnectCount = 0;
         Serial.println(F("[WIFI] Wifi connected"));
         m_wifiPrevState = true;
-        // m_mdns->init();
-        m_mdns->running = true;
         m_state->currentState = State::CONN_SUCCESS;
     }
 }
 
 void WifiService::connect(String ssid, String password)
 {
-    m_wifiManager.connectWifi(ssid, password);
+    Serial.println(F("[WIFI] Connecting..."));
+    WiFi.enableSTA(true);
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    WiFi.setHostname(m_config->getHostName().c_str());
+    WiFi.begin(ssid.c_str(), password.c_str());
+    m_state->currentState = State::CONNECTING;      
+}
+
+void WifiService::disconnect()
+{
+    WiFi.disconnect();
 }

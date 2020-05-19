@@ -12,9 +12,7 @@ public:
 
     static MDNSService*           getInstance() { return s_instance; }
 
-    void init();
     void loop();
-    bool running = true;
     void addFriendlyName(String name);
 
 private:

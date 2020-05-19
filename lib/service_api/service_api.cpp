@@ -141,11 +141,12 @@ void API::processData(String response, int id, String source)
 
         Serial.println("[API] Saving SSID:" + ssid + " PASS:" + pass);
 
-        Serial.println(F("[API] Disconnecting any current WiFi connections."));
-        WiFi.disconnect();
-        delay(1000);
-        Serial.println(F("[API] Connecting to provided WiFi credentials."));
-        WifiService::getInstance()->connect(ssid, pass);
+        State::getInstance()->reboot();
+        // Serial.println(F("[API] Disconnecting any current WiFi connections."));
+        // WiFi.disconnect();
+        // delay(1000);
+        // Serial.println(F("[API] Connecting to provided WiFi credentials."));
+        // WifiService::getInstance()->connect(ssid, pass);
     }
     
     // AUTHENTICATION TO THE API

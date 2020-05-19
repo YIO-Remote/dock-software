@@ -57,17 +57,17 @@ void LedControl::loop()
     else if (State::getInstance()->currentState == State::SETUP)
     {
       ledcWrite(m_ledChannel, 255);
-      delay(800);
+      delay(1000);
       ledcWrite(m_ledChannel, 0);
-      delay(800);
+      delay(1000);
     }
     // connecting to wifi, turning on OTA
     else if (State::getInstance()->currentState == State::CONNECTING)
     {
       ledcWrite(m_ledChannel, 255);
-      delay(300);
+      delay(200);
       ledcWrite(m_ledChannel, 0);
-      delay(300);
+      delay(200);
     }
     // successful connection
     else if (State::getInstance()->currentState == State::CONN_SUCCESS)
