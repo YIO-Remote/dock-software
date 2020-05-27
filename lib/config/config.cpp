@@ -1,7 +1,6 @@
 #include "config.h"
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiManager.h>
 
 Config* Config::s_instance = nullptr;
 
