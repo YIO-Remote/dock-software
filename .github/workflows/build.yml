@@ -38,10 +38,10 @@
             pip install platformio
             
         - name: Install library dependencies
-          run: platformio lib -g install 1 
+          run: platformio lib -g install 1
             
         - name: Run PlatformIO
-          run: platformio ci --board=esp32dev
+          run: platformio ci --board=esp32dev /src/main.cpp
             
         - name: add version
           run: |
