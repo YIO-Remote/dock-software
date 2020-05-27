@@ -40,6 +40,8 @@
         - name: Install library dependencies
           run: platformio lib -g install 1
             
+        - uses: actions/checkout@master
+        
         - name: Run PlatformIO
           run: platformio ci --board=esp32dev /src/main.cpp
             
