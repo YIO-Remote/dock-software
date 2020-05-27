@@ -39,17 +39,16 @@
             
         - name: Install library dependencies
           run: platformio lib -g install 1
-            
-        - uses: actions/checkout@master
         
         - name: Run PlatformIO
-          run: platformio ci --board=esp32dev /src/main.cpp
+          run: platformio run -e esp32dev
             
         - name: add version
           run: |
             mkdir version
             cd version
             echo ${{ env.VERSION }} > version.txt
+            cp ./pio/build/*/firmware.bin firmware.bin
  
         - name: Archive production artifacts
           uses: actions/upload-artifact@v2
