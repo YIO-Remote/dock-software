@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiManager.h>
 #include <config.h>
 #include <state.h>
 #include <service_mdns.h>
@@ -19,6 +18,7 @@ public:
     void initiateWifi();
     void handleReconnect();
     void connect(String ssid, String password);
+    void disconnect();
 
 private:
     static WifiService*           s_instance;
@@ -30,10 +30,6 @@ private:
     bool                          m_wifiPrevState = false; // previous WIFI connection state; 0 - disconnected, 1 - connected
     unsigned long                 m_wifiCheckTimedUl = 30000;
     int                           m_wifiReconnectCount = 0;
-
-    WiFiManager                   m_wifiManager;
-    String                        m_ssid;
-    String                        m_password;
 };
 
 #endif

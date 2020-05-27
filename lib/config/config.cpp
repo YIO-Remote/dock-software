@@ -31,12 +31,6 @@ int Config::getLedBrightness()
 {
     m_preferences.begin("general", false);
     int led_brightness = m_preferences.getInt("brightness", 0);
-
-    if (led_brightness != 0)
-    {
-        Serial.print(F("[CONFIG] LED brightness setting found: "));
-        Serial.println(led_brightness);
-    }
     m_preferences.end();
     
     return led_brightness;
@@ -54,12 +48,6 @@ String Config::getFriendlyName()
 {
     m_preferences.begin("general", false);
     String friendlyName = m_preferences.getString("friendly_name", "");
-
-    if (!friendlyName.equals(""))
-    {
-        Serial.print(F("[CONFIG] Friendly name was found: "));
-        Serial.println(friendlyName);
-    }
     m_preferences.end();
 
     return friendlyName;
@@ -77,12 +65,6 @@ String Config::getWifiSsid()
 {
     m_preferences.begin("wifi", false);
     String ssid = m_preferences.getString("ssid", "");
-
-    if (!ssid.equals(""))
-    {
-        Serial.print(F("[CONFIG] SSID was found: "));
-        Serial.println(ssid);
-    }
     m_preferences.end();
 
     return ssid;
@@ -99,12 +81,6 @@ String Config::getWifiPassword()
 {
     m_preferences.begin("wifi", false);
     String password = m_preferences.getString("password", "");
-
-    if (!password.equals(""))
-    {
-        Serial.print(F("[CONFIG] Wifi password was found: "));
-        Serial.println(password);
-    }
     m_preferences.end();
 
     return password;
@@ -132,31 +108,30 @@ void Config::reset()
 {
     Serial.println("[CONFIG] Resetting configuration.");
 
+    Serial.println("[CONFIG] Resetting general.");
     m_preferences.begin("general", false);
     m_preferences.clear();
     m_preferences.end();
 
+    Serial.println("[CONFIG] Resetting general done.");
+
     delay(500);
 
+    Serial.println("[CONFIG] Resetting wifi.");
     m_preferences.begin("wifi", false);
     m_preferences.clear();
     m_preferences.end();
 
+    Serial.println("[CONFIG] Resetting wifi done.");
+
+    delay(500);
+
+    Serial.println("[CONFIG] Erasing flash.");
     int err;
     err = nvs_flash_init();
     Serial.println("[CONFIG] nvs_flash_init: " + err);
     err = nvs_flash_erase();
     Serial.println("[CONFIG] nvs_flash_erase: " + err);
-
-    delay(500);
-
-    Serial.println(F("[CONFIG] Resetting WiFi credentials."));
-    wifi_config_t conf;
-    memset(&conf, 0, sizeof(wifi_config_t));
-    if (esp_wifi_set_config(WIFI_IF_STA, &conf))
-    {
-      log_e("[CONFIG] clear config failed!");
-    }
 
     delay(500);
     

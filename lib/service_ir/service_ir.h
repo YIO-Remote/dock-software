@@ -23,8 +23,7 @@ public:
 
     String                      receive();
 
-    bool                        sendPronto(const String str, uint16_t repeats); // pronto
-    bool                        send(const String str); // raw hex
+    bool                        send(const String message, const String format);
 
     decode_results              results;
     bool                        receiving = false;
@@ -37,15 +36,16 @@ private:
     const uint16_t              kIrLedPin = 19;
     const uint32_t              kBaudRate = 115200;
     const uint16_t              kCaptureBufferSize = 1024; // 1024 == ~511 bits
-    const uint8_t               kTimeout = 50;              // Milli-Seconds
+    const uint8_t               kTimeout = 15;              // Milli-Seconds
     const uint16_t              kFrequency = 38000;        // in Hz. e.g. 38kHz.
     const uint16_t              kMinUnknownSize = 12;
+    String resultToHexidecimal(const decode_results * const result);
+    uint64_t getUInt64fromHex(char const *str);
+    uint16_t * newCodeArray(const uint16_t size);
+    uint16_t countValuesInStr(const String str, char sep);
 
     IRsend                      irsend = IRsend(kIrLedPin);
     IRrecv                      irrecv = IRrecv(kRecvPin, kCaptureBufferSize, kTimeout, true);
-
-    uint16_t                    countValuesInStr(const String str, char sep);
-    uint16_t*                   newCodeArray(const uint16_t size);
 };
 
 #endif

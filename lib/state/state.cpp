@@ -1,11 +1,14 @@
 #include <Arduino.h>
 #include "state.h"
+#include "config.h"
 
 State* State::s_instance = nullptr;
 
 State::State()
 {
     s_instance = this;
+
+    printDockInfo();
 }
 
 void State::reboot()
